@@ -431,8 +431,9 @@ class XThreadsAgent {
 
   async generateReply(tweetText, tone = 'neutral') {
     try {
-      const response = await fetch('https://xthreads.app/api/ai-reply', {
+      const response = await fetch('https://www.xthreads.app/api/ai-reply', {
         method: 'POST',
+        mode: 'cors',
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': this.settings.apiKey

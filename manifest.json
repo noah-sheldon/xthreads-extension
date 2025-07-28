@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "AI-powered Twitter reply assistant for xthreads.app",
   "permissions": ["activeTab", "scripting", "storage", "tabs"],
-  "host_permissions": ["https://x.com/*"],
+  "host_permissions": ["https://www.xthreads.app/*"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "xThreads Agent"

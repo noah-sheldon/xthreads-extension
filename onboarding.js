@@ -2,12 +2,12 @@ class XThreadsOnboarding {
   constructor() {
     this.currentStep = 1;
     this.settings = {
-      apiKey: '',
+      apiKey: "",
       keywords: [],
-      tone: 'neutral',
-      mode: 'manual',
+      tone: "neutral",
+      mode: "manual",
       isActive: false,
-      isOnboarded: false
+      isOnboarded: false,
     };
 
     this.init();
@@ -20,71 +20,75 @@ class XThreadsOnboarding {
 
   bindEvents() {
     // API Key validation
-    const apiKeyInput = document.getElementById('onboardingApiKey');
-    const validateBtn = document.getElementById('validateApiKey');
+    const apiKeyInput = document.getElementById("onboardingApiKey");
+    const validateBtn = document.getElementById("validateApiKey");
 
-    apiKeyInput.addEventListener('input', (e) => {
+    apiKeyInput.addEventListener("input", (e) => {
       const apiKey = e.target.value.trim();
       validateBtn.disabled = apiKey.length < 10;
-      
+
       // Clear previous validation messages
-      const validationMsg = document.getElementById('apiKeyValidation');
-      validationMsg.textContent = '';
-      validationMsg.className = 'validation-message';
+      const validationMsg = document.getElementById("apiKeyValidation");
+      validationMsg.textContent = "";
+      validationMsg.className = "validation-message";
     });
 
-    validateBtn.addEventListener('click', () => {
+    validateBtn.addEventListener("click", () => {
       this.validateApiKey();
     });
 
     // Keywords input
-    const keywordsInput = document.getElementById('onboardingKeywords');
-    keywordsInput.addEventListener('input', (e) => {
+    const keywordsInput = document.getElementById("onboardingKeywords");
+    keywordsInput.addEventListener("input", (e) => {
       this.settings.keywords = e.target.value
-        .split(',')
-        .map(k => k.trim())
-        .filter(k => k.length > 0);
+        .split(",")
+        .map((k) => k.trim())
+        .filter((k) => k.length > 0);
     });
 
     // Tone selection
-    document.querySelectorAll('.tone-option').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        document.querySelectorAll('.tone-option').forEach(b => b.classList.remove('active'));
-        e.currentTarget.classList.add('active');
+    document.querySelectorAll(".tone-option").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        document
+          .querySelectorAll(".tone-option")
+          .forEach((b) => b.classList.remove("active"));
+        e.currentTarget.classList.add("active");
         this.settings.tone = e.currentTarget.dataset.tone;
       });
     });
 
     // Navigation buttons
-    document.getElementById('backToStep1').addEventListener('click', () => {
+    document.getElementById("backToStep1").addEventListener("click", () => {
       this.goToStep(1);
     });
 
-    document.getElementById('continueToStep3').addEventListener('click', () => {
+    document.getElementById("continueToStep3").addEventListener("click", () => {
       this.goToStep(3);
     });
 
-    document.getElementById('backToStep2').addEventListener('click', () => {
+    document.getElementById("backToStep2").addEventListener("click", () => {
       this.goToStep(2);
     });
 
-    document.getElementById('finishOnboarding').addEventListener('click', () => {
-      this.finishOnboarding();
-    });
+    document
+      .getElementById("finishOnboarding")
+      .addEventListener("click", () => {
+        this.finishOnboarding();
+      });
 
-    document.getElementById('openTwitter').addEventListener('click', () => {
-      chrome.tabs.create({ url: 'https://x.com' });
+    document.getElementById("openTwitter").addEventListener("click", () => {
+      chrome.tabs.create({ url: "https://x.com" });
       window.close();
     });
   }
 
   async validateApiKey() {
-    const apiKey = document.getElementById('onboardingApiKey').value.trim();
-    const validateBtn = document.getElementById('validateApiKey');
-    const validationMsg = document.getElementById('apiKeyValidation');
+    const apiKey = document.getElementById("onboardingApiKey").value.trim();
+    const validateBtn = document.getElementById("validateApiKey");
+    const validationMsg = document.getElementById("apiKeyValidation");
 
     if (!apiKey) {
-      this.showValidationMessage('Please enter an API key', 'error');
+      this.showValidationMessage("Please enter an API key", "error");
       return;
     }
 
@@ -101,22 +105,26 @@ class XThreadsOnboarding {
 
     try {
       // Test API key with a simple request
-      const response = await fetch('https://xthreads.app/api/ai-reply', {
-        method: 'POST',
+      const response = await fetch("https://www.xthreads.app/api/ai-reply", {
+        method: "POST",
+        mode: "cors",
         headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
         },
         body: JSON.stringify({
-          tweet: 'Test tweet for API validation',
-          tone: 'neutral'
-        })
+          tweet: "Test tweet for API validation",
+          tone: "neutral",
+        }),
       });
 
       if (response.ok) {
         this.settings.apiKey = apiKey;
-        this.showValidationMessage('API key validated successfully!', 'success');
-        
+        this.showValidationMessage(
+          "API key validated successfully!",
+          "success"
+        );
+
         // Wait a moment then proceed to next step
         setTimeout(() => {
           this.goToStep(2);
@@ -125,9 +133,12 @@ class XThreadsOnboarding {
         throw new Error(`API validation failed: ${response.status}`);
       }
     } catch (error) {
-      console.error('API key validation failed:', error);
-      this.showValidationMessage('Invalid API key. Please check and try again.', 'error');
-      
+      console.error("API key validation failed:", error);
+      this.showValidationMessage(
+        "Invalid API key. Please check and try again.",
+        "error"
+      );
+
       // Reset button
       validateBtn.disabled = false;
       validateBtn.innerHTML = `
@@ -141,29 +152,29 @@ class XThreadsOnboarding {
   }
 
   showValidationMessage(message, type) {
-    const validationMsg = document.getElementById('apiKeyValidation');
+    const validationMsg = document.getElementById("apiKeyValidation");
     validationMsg.textContent = message;
     validationMsg.className = `validation-message ${type}`;
   }
 
   goToStep(stepNumber) {
     // Hide current step
-    document.querySelectorAll('.step').forEach(step => {
-      step.classList.remove('active');
+    document.querySelectorAll(".step").forEach((step) => {
+      step.classList.remove("active");
     });
 
     // Show target step
-    document.getElementById(`step${stepNumber}`).classList.add('active');
-    
+    document.getElementById(`step${stepNumber}`).classList.add("active");
+
     this.currentStep = stepNumber;
     this.updateProgress();
 
     // Scroll to top
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   updateProgress() {
-    const progressFill = document.getElementById('progressFill');
+    const progressFill = document.getElementById("progressFill");
     const progress = (this.currentStep / 4) * 100;
     progressFill.style.width = `${progress}%`;
   }
@@ -171,17 +182,23 @@ class XThreadsOnboarding {
   async finishOnboarding() {
     try {
       // Ensure we have keywords
-      const keywordsInput = document.getElementById('onboardingKeywords');
+      const keywordsInput = document.getElementById("onboardingKeywords");
       if (keywordsInput.value.trim()) {
         this.settings.keywords = keywordsInput.value
-          .split(',')
-          .map(k => k.trim())
-          .filter(k => k.length > 0);
+          .split(",")
+          .map((k) => k.trim())
+          .filter((k) => k.length > 0);
       }
 
       // Set default keywords if none provided
       if (this.settings.keywords.length === 0) {
-        this.settings.keywords = ['AI', 'tech', 'startup', 'coding', 'development'];
+        this.settings.keywords = [
+          "AI",
+          "tech",
+          "startup",
+          "coding",
+          "development",
+        ];
       }
 
       // Mark as onboarded
@@ -189,28 +206,27 @@ class XThreadsOnboarding {
 
       // Save settings
       await chrome.storage.local.set({
-        xthreads_settings: this.settings
+        xthreads_settings: this.settings,
       });
 
-      this.showToast('Setup completed successfully!', 'success');
-      
+      this.showToast("Setup completed successfully!", "success");
+
       // Go to final step
       this.goToStep(4);
-
     } catch (error) {
-      console.error('Failed to complete onboarding:', error);
-      this.showToast('Failed to save settings. Please try again.', 'error');
+      console.error("Failed to complete onboarding:", error);
+      this.showToast("Failed to save settings. Please try again.", "error");
     }
   }
 
-  showToast(message, type = 'info') {
-    const container = document.getElementById('toastContainer');
-    const toast = document.createElement('div');
+  showToast(message, type = "info") {
+    const container = document.getElementById("toastContainer");
+    const toast = document.createElement("div");
     toast.className = `toast ${type}`;
     toast.textContent = message;
-    
+
     container.appendChild(toast);
-    
+
     setTimeout(() => {
       toast.remove();
     }, 4000);
@@ -218,7 +234,7 @@ class XThreadsOnboarding {
 }
 
 // Add CSS for spinning animation
-const style = document.createElement('style');
+const style = document.createElement("style");
 style.textContent = `
   .animate-spin {
     animation: spin 1s linear infinite;
@@ -236,6 +252,6 @@ style.textContent = `
 document.head.appendChild(style);
 
 // Initialize onboarding when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener("DOMContentLoaded", () => {
   new XThreadsOnboarding();
 });
