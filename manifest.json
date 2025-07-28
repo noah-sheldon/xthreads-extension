@@ -3,19 +3,16 @@
   "name": "xThreads Extension",
   "version": "1.0.0",
   "description": "AI-powered Twitter reply assistant for xthreads.app",
-  "permissions": [
-    "activeTab",
-    "scripting",
-    "storage"
-  ],
-  "host_permissions": [
-    "https://x.com/*",
-    "https://twitter.com/*",
-    "https://xthreads.app/*"
-  ],
+  "permissions": ["activeTab", "scripting", "storage", "tabs"],
+  "host_permissions": ["https://x.com/*"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "xThreads Agent"
+  },
+  "icons": {
+    "16": "assets/icon16.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
   },
   "content_scripts": [
     {
