@@ -1,0 +1,125 @@
+/* xThreads Extension Styles */
+
+.xthreads-reply-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, #0f766e 0%, #22d3ee 100%);
+  color: white;
+  border: none;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: 8px;
+  opacity: 0.8;
+}
+
+.xthreads-reply-btn:hover {
+  opacity: 1;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.3);
+}
+
+.xthreads-reply-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.xthreads-reply-btn.replied {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+}
+
+.xthreads-reply-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.xthreads-reply-btn .animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Toast Notifications */
+.xthreads-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  animation: slideInToast 0.3s ease;
+  max-width: 300px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.xthreads-toast-success {
+  border-left: 4px solid #22c55e;
+}
+
+.xthreads-toast-error {
+  border-left: 4px solid #ef4444;
+}
+
+.xthreads-toast-info {
+  border-left: 4px solid #3b82f6;
+}
+
+@keyframes slideInToast {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Hide xThreads buttons when not needed */
+[data-testid="tweet"]:not(:hover) .xthreads-reply-btn {
+  opacity: 0.6;
+}
+
+[data-testid="tweet"]:hover .xthreads-reply-btn {
+  opacity: 1;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .xthreads-reply-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+  
+  .xthreads-reply-btn svg {
+    width: 12px;
+    height: 12px;
+  }
+  
+  .xthreads-toast {
+    right: 10px;
+    left: 10px;
+    max-width: none;
+  }
+}
