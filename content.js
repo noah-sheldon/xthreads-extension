@@ -181,7 +181,6 @@ class XThreadsAgent {
         <path d="M2 17L12 22L22 17"/>
         <path d="M2 12L12 17L22 12"/>
       </svg>
-      <span>xThreads</span>
     `;
     
     button.addEventListener('click', async (e) => {
