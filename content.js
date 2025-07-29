@@ -1,3 +1,7 @@
+// Guard against multiple injections
+if (!window.__xthreads_injected__) {
+  window.__xthreads_injected__ = true;
+
 class XThreadsAgent {
   constructor() {
     this.settings = null;
@@ -22,7 +26,7 @@ class XThreadsAgent {
     this.loadRepliedTweets();
     this.setupActivityTracking();
     this.setupMessageListener();
-    this.addManualReplyButtons();
+    this.addOverlayButtons();
     
     // Clean up old reply times every hour
     setInterval(() => this.cleanupReplyTimes(), 3600000);
@@ -37,19 +41,23 @@ class XThreadsAgent {
         case 'stopAgent':
           this.stopAgent();
           break;
+        case 'typeInComposer':
+          this.typeInComposer(message.text);
+          break;
+        case 'postThread':
+          this.postThread(message.thread);
+          break;
       }
     });
   }
 
   setupActivityTracking() {
-    // Track mouse movement and keyboard activity
     let activityTimeout;
     
     const updateActivity = () => {
       this.lastActivity = Date.now();
       clearTimeout(activityTimeout);
       
-      // Consider user inactive after 5 minutes of no activity
       activityTimeout = setTimeout(() => {
         if (this.isActive && this.settings?.mode === 'auto') {
           console.log('User inactive, pausing auto replies');
@@ -63,24 +71,22 @@ class XThreadsAgent {
     document.addEventListener('scroll', updateActivity);
     document.addEventListener('click', updateActivity);
 
-    // Check if tab is focused
     this.activityCheckInterval = setInterval(() => {
       if (this.isActive && this.settings?.mode === 'auto') {
         const isTabFocused = !document.hidden;
-        const isRecentActivity = Date.now() - this.lastActivity < 300000; // 5 minutes
+        const isRecentActivity = Date.now() - this.lastActivity < 300000;
         
         if (!isTabFocused || !isRecentActivity) {
           this.pauseAutoMode();
         }
       }
-    }, 30000); // Check every 30 seconds
+    }, 30000);
   }
 
   async loadRepliedTweets() {
     try {
       const result = await chrome.storage.local.get('xthreads_replied_tweets');
       if (result.xthreads_replied_tweets) {
-        // Clean up tweets older than 48 hours
         const cutoff = Date.now() - (48 * 60 * 60 * 1000);
         const validTweets = result.xthreads_replied_tweets.filter(
           tweet => tweet.timestamp > cutoff
@@ -88,7 +94,6 @@ class XThreadsAgent {
         
         this.repliedTweets = new Set(validTweets.map(t => t.id));
         
-        // Save cleaned up list
         await chrome.storage.local.set({
           xthreads_replied_tweets: validTweets
         });
@@ -118,18 +123,15 @@ class XThreadsAgent {
     }
   }
 
-  addManualReplyButtons() {
-    // Add reply buttons to existing tweets
-    this.addReplyButtonsToTweets();
+  addOverlayButtons() {
+    this.addButtonsToTweets();
     
-    // Watch for new tweets being loaded
     const observer = new MutationObserver((mutations) => {
       let shouldAddButtons = false;
       
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === Node.ELEMENT_NODE) {
-            // Check if new tweets were added
             if (node.querySelector && (
               node.querySelector('[data-testid="tweet"]') ||
               node.matches('[data-testid="tweet"]')
@@ -141,7 +143,7 @@ class XThreadsAgent {
       });
       
       if (shouldAddButtons) {
-        setTimeout(() => this.addReplyButtonsToTweets(), 1000);
+        setTimeout(() => this.addButtonsToTweets(), 1000);
       }
     });
 
@@ -151,87 +153,236 @@ class XThreadsAgent {
     });
   }
 
-  addReplyButtonsToTweets() {
+  addButtonsToTweets() {
     const tweets = document.querySelectorAll('[data-testid="tweet"]');
     
     tweets.forEach(tweet => {
-      // Skip if button already exists
-      if (tweet.querySelector('.xthreads-reply-btn')) return;
+      if (tweet.querySelector('.xthreads-overlay-btn')) return;
       
       const tweetId = this.extractTweetId(tweet);
       if (!tweetId) return;
 
-      // Skip if already replied
-      if (this.repliedTweets.has(tweetId)) return;
-
       const actionBar = tweet.querySelector('[role="group"]');
       if (!actionBar) return;
 
-      const replyBtn = this.createReplyButton(tweet, tweetId);
-      actionBar.appendChild(replyBtn);
+      const overlayBtn = this.createOverlayButton(tweet, tweetId);
+      actionBar.appendChild(overlayBtn);
     });
   }
 
-  createReplyButton(tweetElement, tweetId) {
+  createOverlayButton(tweetElement, tweetId) {
     const button = document.createElement('button');
-    button.className = 'xthreads-reply-btn';
+    button.className = 'xthreads-overlay-btn';
     button.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 2L2 7L12 12L22 7L12 2Z"/>
-        <path d="M2 17L12 22L22 17"/>
-        <path d="M2 12L12 17L22 12"/>
-      </svg>
+      <img src="${chrome.runtime.getURL('assets/logo16.png')}" width="14" height="14" alt="xThreads" />
     `;
     
     button.addEventListener('click', async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      await this.handleManualReply(tweetElement, tweetId, button);
+      await this.handleOverlayClick(tweetElement, tweetId);
     });
 
     return button;
   }
 
-  async handleManualReply(tweetElement, tweetId, button) {
+  async handleOverlayClick(tweetElement, tweetId) {
+    const tweetText = this.extractTweetText(tweetElement);
+    
+    // Show context menu or directly reply
+    const action = await this.showContextMenu(tweetText);
+    
+    if (action === 'reply') {
+      await this.handleReply(tweetElement, tweetId, tweetText);
+    } else if (action === 'rewrite') {
+      await this.handleRewrite(tweetText);
+    }
+  }
+
+  async showContextMenu(tweetText) {
+    return new Promise((resolve) => {
+      const menu = document.createElement('div');
+      menu.className = 'xthreads-context-menu';
+      menu.innerHTML = `
+        <div class="context-menu-item" data-action="reply">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+          </svg>
+          Reply to this tweet
+        </div>
+        <div class="context-menu-item" data-action="rewrite">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+          Rewrite this tweet
+        </div>
+      `;
+      
+      document.body.appendChild(menu);
+      
+      menu.addEventListener('click', (e) => {
+        const action = e.target.closest('.context-menu-item')?.dataset.action;
+        menu.remove();
+        resolve(action);
+      });
+      
+      // Remove menu after 5 seconds
+      setTimeout(() => {
+        if (menu.parentNode) {
+          menu.remove();
+          resolve(null);
+        }
+      }, 5000);
+    });
+  }
+
+  async handleReply(tweetElement, tweetId, tweetText) {
     if (!this.settings?.apiKey) {
       this.showToast('Please configure API key in extension popup', 'error');
       return;
     }
 
-    const originalText = button.innerHTML;
-    button.innerHTML = `
-      <svg class="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 12c0 1-1 1-1 1s-1 0-1-1 1-1 1-1 1 0 1 1"/>
-        <path d="M16 12c0 1-1 1-1 1s-1 0-1-1 1-1 1-1 1 0 1 1"/>
-        <path d="M11 12c0 1-1 1-1 1s-1 0-1-1 1-1 1-1 1 0 1 1"/>
-      </svg>
-      <span>Generating...</span>
-    `;
-    button.disabled = true;
-
     try {
-      const tweetText = this.extractTweetText(tweetElement);
-      const reply = await this.generateReply(tweetText, this.settings.tone);
+      const reply = await this.generateReply(tweetText, this.settings.tone || 'neutral');
       
       if (reply) {
         await this.postReply(tweetElement, reply, tweetId);
-        button.innerHTML = `
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20 6L9 17l-5-5"/>
-          </svg>
-          <span>Replied</span>
-        `;
-        button.classList.add('replied');
         this.showToast('Reply posted successfully!', 'success');
-      } else {
-        throw new Error('Failed to generate reply');
       }
     } catch (error) {
-      console.error('Manual reply failed:', error);
-      button.innerHTML = originalText;
-      button.disabled = false;
+      console.error('Reply failed:', error);
       this.showToast('Failed to generate reply', 'error');
     }
+  }
+
+  async handleRewrite(tweetText) {
+    // Open popup with the tweet text pre-filled
+    try {
+      await chrome.runtime.sendMessage({
+        action: 'openPopupWithText',
+        text: tweetText,
+        tab: 'rewrite'
+      });
+    } catch (error) {
+      console.error('Failed to open popup:', error);
+    }
+  }
+
+  async typeInComposer(text) {
+    try {
+      // Find the main tweet composer
+      const composer = document.querySelector('[data-testid="tweetTextarea_0"]') ||
+                      document.querySelector('[role="textbox"][data-testid="tweetTextarea_0"]') ||
+                      document.querySelector('div[role="textbox"][contenteditable="true"]');
+      
+      if (!composer) {
+        // Try to open composer
+        const composeBtn = document.querySelector('[data-testid="SideNav_NewTweet_Button"]') ||
+                          document.querySelector('[href="/compose/tweet"]');
+        
+        if (composeBtn) {
+          composeBtn.click();
+          await this.sleep(2000);
+          return this.typeInComposer(text);
+        }
+        
+        throw new Error('Tweet composer not found');
+      }
+      
+      // Clear existing text and type new text
+      composer.focus();
+      composer.textContent = '';
+      
+      await this.simulateTyping(composer, text);
+      
+      // Wait a moment then click post
+      await this.sleep(1000);
+      
+      const postButton = document.querySelector('[data-testid="tweetButtonInline"]') ||
+                        document.querySelector('[data-testid="tweetButton"]');
+      
+      if (postButton && !postButton.disabled) {
+        postButton.click();
+      }
+      
+    } catch (error) {
+      console.error('Failed to type in composer:', error);
+      throw error;
+    }
+  }
+
+  async postThread(thread) {
+    try {
+      // Navigate to compose if not already there
+      if (!window.location.href.includes('/compose/tweet')) {
+        window.location.href = 'https://x.com/compose/tweet';
+        await this.sleep(3000);
+      }
+      
+      for (let i = 0; i < thread.length; i++) {
+        const tweet = thread[i];
+        
+        // Find the current tweet composer
+        const composer = document.querySelector('[data-testid="tweetTextarea_0"]') ||
+                        document.querySelector(`[data-testid="tweetTextarea_${i}"]`) ||
+                        document.querySelector('div[role="textbox"][contenteditable="true"]');
+        
+        if (!composer) {
+          throw new Error(`Tweet composer not found for tweet ${i + 1}`);
+        }
+        
+        // Type the tweet
+        composer.focus();
+        composer.textContent = '';
+        await this.simulateTyping(composer, tweet);
+        
+        // Add next tweet if not the last one
+        if (i < thread.length - 1) {
+          const addTweetBtn = document.querySelector('[data-testid="addButton"]') ||
+                             document.querySelector('[aria-label="Add tweet"]');
+          
+          if (addTweetBtn) {
+            addTweetBtn.click();
+            await this.sleep(1000);
+          }
+        }
+      }
+      
+      // Post the entire thread
+      await this.sleep(1000);
+      const postAllBtn = document.querySelector('[data-testid="tweetButton"]');
+      
+      if (postAllBtn && !postAllBtn.disabled) {
+        postAllBtn.click();
+      }
+      
+    } catch (error) {
+      console.error('Failed to post thread:', error);
+      throw error;
+    }
+  }
+
+  async simulateTyping(element, text) {
+    element.focus();
+    
+    for (let i = 0; i < text.length; i++) {
+      element.textContent = text.substring(0, i + 1);
+      
+      // Trigger input events
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+      
+      // Random typing delay (30-100ms)
+      await this.sleep(this.getRandomInterval(30, 100));
+    }
+    
+    // Final events
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+    
+    // Wait a bit more to ensure the post button is enabled
+    await this.sleep(500);
   }
 
   startAgent(settings) {
@@ -239,14 +390,11 @@ class XThreadsAgent {
     this.isActive = true;
     this.failureCount = 0;
 
-    console.log('xThreads Agent started in', settings.mode, 'mode');
+    console.log('xThreads Agent started');
 
     if (settings.mode === 'auto') {
       this.startAutoMode();
     }
-
-    // Update manual buttons with current settings
-    this.addReplyButtonsToTweets();
   }
 
   stopAgent() {
@@ -265,14 +413,12 @@ class XThreadsAgent {
       clearInterval(this.replyInterval);
     }
 
-    // Start auto-reply process - check every 30-60 seconds
     this.replyInterval = setInterval(() => {
       if (this.isActive && this.settings?.mode === 'auto') {
         this.processAutoReplies();
       }
-    }, this.getRandomInterval(30000, 60000)); // 30-60 seconds
+    }, this.getRandomInterval(30000, 60000));
 
-    // Process immediately
     setTimeout(() => {
       if (this.isActive) {
         this.processAutoReplies();
@@ -296,7 +442,7 @@ class XThreadsAgent {
 
     try {
       const tweets = this.findMatchingTweets();
-      const validTweets = tweets.slice(0, 3); // Process max 3 tweets at a time
+      const validTweets = tweets.slice(0, 3);
 
       console.log(`Found ${validTweets.length} matching tweets for auto reply`);
 
@@ -311,7 +457,6 @@ class XThreadsAgent {
           const reply = await this.generateReply(tweetText, this.settings.tone);
           
           if (reply) {
-            // Random delay between replies (5-30 seconds)
             const delay = this.getRandomInterval(5000, 30000);
             await this.sleep(delay);
             
@@ -320,7 +465,6 @@ class XThreadsAgent {
             await this.postReply(tweet, reply, tweetId);
             console.log('Auto reply posted successfully');
             
-            // Update stats
             this.updateStats('success');
           }
         } catch (error) {
@@ -349,38 +493,32 @@ class XThreadsAgent {
       
       const tweetText = this.extractTweetText(tweet).toLowerCase();
       
-      // Check if tweet contains any keywords
       const hasKeyword = keywords.some(keyword => 
         tweetText.includes(keyword)
       );
       
       if (!hasKeyword) return false;
       
-      // Prioritize recent tweets with low reply counts
       const replyCount = this.getReplyCount(tweet);
       const isRecent = this.isTweetRecent(tweet);
       const isFromVerified = this.isTweetFromVerified(tweet);
       
-      // Skip tweets with too many replies or from verified accounts
       return replyCount < 10 && isRecent && !isFromVerified;
     });
   }
 
   extractTweetId(tweetElement) {
-    // Try to extract tweet ID from various possible locations
     const link = tweetElement.querySelector('a[href*="/status/"]');
     if (link) {
       const match = link.href.match(/\/status\/(\d+)/);
       return match ? match[1] : null;
     }
     
-    // Fallback: use element's position and text hash
     const text = this.extractTweetText(tweetElement);
     return text ? this.hashCode(text).toString() : null;
   }
 
   extractTweetText(tweetElement) {
-    // Try multiple selectors to find tweet text
     const textSelectors = [
       '[data-testid="tweetText"]',
       '[lang]',
@@ -394,7 +532,6 @@ class XThreadsAgent {
       }
     }
     
-    // Fallback: get all text content and clean it
     const allText = tweetElement.textContent || '';
     return allText.replace(/\s+/g, ' ').trim().substring(0, 500);
   }
@@ -417,13 +554,12 @@ class XThreadsAgent {
       const tweetTime = new Date(timeElement.dateTime);
       const now = new Date();
       const diffMinutes = (now - tweetTime) / (1000 * 60);
-      return diffMinutes < 60; // Tweet is less than 1 hour old
+      return diffMinutes < 60;
     }
-    return true; // Assume recent if we can't determine
+    return true;
   }
 
   isTweetFromVerified(tweetElement) {
-    // Look for verification badge
     const verifiedBadge = tweetElement.querySelector('[data-testid="icon-verified"]');
     return !!verifiedBadge;
   }
@@ -450,7 +586,6 @@ class XThreadsAgent {
       const data = await response.json();
       
       if (data.reply) {
-        // Clean and validate reply
         return this.cleanReply(data.reply);
       } else {
         throw new Error('No reply generated');
@@ -462,19 +597,16 @@ class XThreadsAgent {
   }
 
   cleanReply(reply) {
-    // Remove hashtags, excessive emojis, and ensure human-like text
     let cleaned = reply
-      .replace(/#\w+/g, '') // Remove hashtags
-      .replace(/[^\w\s.,?!]/g, '') // Keep only allowed special characters
-      .replace(/\s+/g, ' ') // Normalize whitespace
+      .replace(/#\w+/g, '')
+      .replace(/[^\w\s.,?!]/g, '')
+      .replace(/\s+/g, ' ')
       .trim();
     
-    // Ensure reasonable length (Twitter's limit is 280 chars)
     if (cleaned.length > 250) {
       cleaned = cleaned.substring(0, 247) + '...';
     }
     
-    // Ensure it doesn't look robotic
     if (cleaned.toLowerCase().includes('as an ai') || 
         cleaned.toLowerCase().includes('i am an ai') ||
         cleaned.toLowerCase().includes('artificial intelligence')) {
@@ -486,18 +618,14 @@ class XThreadsAgent {
 
   async postReply(tweetElement, replyText, tweetId) {
     try {
-      // Click the reply button to open reply dialog
       const replyButton = tweetElement.querySelector('[data-testid="reply"]');
       if (!replyButton) {
         throw new Error('Reply button not found');
       }
       
       replyButton.click();
-      
-      // Wait for reply dialog to open
       await this.sleep(1500);
       
-      // Find the reply text area
       const replyTextArea = document.querySelector('[data-testid="tweetTextarea_0"]') ||
                            document.querySelector('[role="textbox"][data-testid="tweetTextarea_0"]') ||
                            document.querySelector('div[role="textbox"][contenteditable="true"]');
@@ -506,32 +634,20 @@ class XThreadsAgent {
         throw new Error('Reply text area not found');
       }
       
-      // Clear existing text and insert reply
       replyTextArea.focus();
       replyTextArea.textContent = '';
       
-      // Simulate typing
       await this.simulateTyping(replyTextArea, replyText);
-      
-      // Wait a moment before posting
       await this.sleep(1000);
       
-      // Find and click the reply/post button
       const postButton = document.querySelector('[data-testid="tweetButtonInline"]') ||
                         document.querySelector('[data-testid="tweetButton"]');
       
       if (postButton && !postButton.disabled) {
         postButton.click();
-        
-        // Wait for post to complete
         await this.sleep(2000);
-        
-        // Mark as replied
         await this.saveRepliedTweet(tweetId);
-        
-        // Record successful reply
         this.recordReply();
-        
         console.log('Reply posted successfully');
       } else {
         throw new Error('Post button not found or disabled');
@@ -540,7 +656,6 @@ class XThreadsAgent {
     } catch (error) {
       console.error('Failed to post reply:', error);
       
-      // Try to close any open dialogs
       const closeButton = document.querySelector('[data-testid="app-bar-close"]');
       if (closeButton) {
         closeButton.click();
@@ -550,35 +665,13 @@ class XThreadsAgent {
     }
   }
 
-  async simulateTyping(element, text) {
-    // Simulate human-like typing
-    element.focus();
-    
-    for (let i = 0; i < text.length; i++) {
-      element.textContent = text.substring(0, i + 1);
-      
-      // Trigger input events
-      element.dispatchEvent(new Event('input', { bubbles: true }));
-      element.dispatchEvent(new Event('change', { bubbles: true }));
-      
-      // Random typing delay (50-150ms)
-      await this.sleep(this.getRandomInterval(50, 150));
-    }
-    
-    // Final events
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-    element.dispatchEvent(new Event('change', { bubbles: true }));
-  }
-
   canReply() {
     const now = Date.now();
     
-    // Check minimum interval between replies
     if (now - this.lastReplyTime < this.minReplyInterval) {
       return false;
     }
     
-    // Check hourly rate limit
     this.cleanupReplyTimes();
     return this.replyTimes.length < this.maxRepliesPerHour;
   }
@@ -591,7 +684,7 @@ class XThreadsAgent {
   }
 
   cleanupReplyTimes() {
-    const oneHourAgo = Date.now() - 3600000; // 1 hour
+    const oneHourAgo = Date.now() - 3600000;
     this.replyTimes = this.replyTimes.filter(time => time > oneHourAgo);
   }
 
@@ -601,7 +694,6 @@ class XThreadsAgent {
   }
 
   updateStats(type) {
-    // Send stats update to popup
     chrome.runtime.sendMessage({
       action: 'updateStats',
       stats: {
@@ -612,7 +704,6 @@ class XThreadsAgent {
     });
   }
 
-  // Utility functions
   getRandomInterval(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
@@ -626,13 +717,12 @@ class XThreadsAgent {
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
       hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
+      hash = hash & hash;
     }
     return Math.abs(hash);
   }
 
   showToast(message, type = 'info') {
-    // Create toast notification
     const toast = document.createElement('div');
     toast.className = `xthreads-toast xthreads-toast-${type}`;
     toast.textContent = message;
@@ -652,4 +742,6 @@ if (document.readyState === 'loading') {
   });
 } else {
   new XThreadsAgent();
+}
+
 }
