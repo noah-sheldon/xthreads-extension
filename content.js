@@ -179,9 +179,21 @@ if (!window.__xthreads_injected__) {
                   <div class="xthreads-input-group">
                     <label>Tone:</label>
                     <select class="xthreads-tone-select">
-                      <option value="neutral">Neutral</option>
                       <option value="professional">Professional</option>
                       <option value="casual">Casual</option>
+                      <option value="punchy">Punchy</option>
+                      <option value="educational">Educational</option>
+                      <option value="inspirational">Inspirational</option>
+                      <option value="humorous">Humorous</option>
+                      <option value="empathetic">Empathetic</option>
+                      <option value="encouraging">Encouraging</option>
+                      <option value="authentic">Authentic</option>
+                      <option value="controversial">Controversial</option>
+                      <option value="bold">Bold</option>
+                      <option value="witty">Witty</option>
+                      <option value="insightful">Insightful</option>
+                      <option value="analytical">Analytical</option>
+                      <option value="storytelling">Storytelling</option>
                     </select>
                   </div>
                 </div>

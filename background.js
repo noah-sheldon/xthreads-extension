@@ -47,7 +47,7 @@ class XThreadsBackground {
         apiKey: "",
         selectedBrandId: "",
         keywords: [],
-        tone: "neutral",
+        tone: "professional",
         isActive: false,
         isOnboarded: false,
       },
@@ -80,7 +80,7 @@ class XThreadsBackground {
         apiKey: "",
         selectedBrandId: "",
         keywords: [],
-        tone: "neutral",
+        tone: "professional",
         isActive: false,
         isOnboarded: false,
       };

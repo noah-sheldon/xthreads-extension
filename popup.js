@@ -8,7 +8,7 @@ class XThreadsPopup {
       apiKey: '',
       selectedBrandId: '',
       keywords: [],
-      tone: 'neutral',
+      tone: 'professional',
       isOnboarded: false,
       isActive: false
     };
@@ -30,42 +30,19 @@ class XThreadsPopup {
     await this.loadSettings();
     
     // Check if user has completed onboarding
-    if (!this.settings.isOnboarded) {
-      this.showOnboardingPrompt();
+    if (!this.settings.isOnboarded || !this.settings.apiKey) {
+      chrome.tabs.create({ url: chrome.runtime.getURL('onboarding.html') });
+      window.close();
       return;
     }
     
     this.bindEvents();
+    this.updateApiKeyDisplay();
     this.loadBrandSpaces();
     this.updateUI();
     this.updateStats();
   }
 
-  showOnboardingPrompt() {
-    const container = document.querySelector('.container');
-    container.innerHTML = `
-      <div class="onboarding-prompt" style="padding: 40px 20px; text-align: center;">
-        <div class="logo" style="margin-bottom: 20px;">
-          <img src="assets/icon16.png" alt="xThreads" width="32" height="32" />
-          <h2 style="margin-top: 12px; color: #1f2937;">Welcome to xThreads Agent</h2>
-        </div>
-        <p style="color: #6b7280; margin-bottom: 24px;">Please complete the setup process to start using the extension.</p>
-        <button id="openOnboarding" class="btn-primary">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-            <polyline points="15,3 21,3 21,9"/>
-            <line x1="10" y1="14" x2="21" y2="3"/>
-          </svg>
-          Complete Setup
-        </button>
-      </div>
-    `;
-
-    document.getElementById('openOnboarding').addEventListener('click', () => {
-      chrome.tabs.create({ url: chrome.runtime.getURL('onboarding.html') });
-      window.close();
-    });
-  }
 
   async loadSettings() {
     try {
@@ -116,30 +93,23 @@ class XThreadsPopup {
   }
 
   updateBrandSpaceSelectors() {
-    const selectors = [
-      'generateBrand', 'rewriteBrand', 'threadBrand', 
-      'agentBrand', 'settingsBrandSpace'
-    ];
-
-    selectors.forEach(selectorId => {
-      const select = document.getElementById(selectorId);
-      if (select) {
-        select.innerHTML = '';
-        
-        if (this.brandSpaces.length === 0) {
-          select.innerHTML = '<option value="">No brand spaces found</option>';
-        } else {
-          select.innerHTML = '<option value="">Select brand space</option>';
-          this.brandSpaces.forEach(brand => {
-            const option = document.createElement('option');
-            option.value = brand.id;
-            option.textContent = brand.name;
-            option.selected = brand.id === this.settings.selectedBrandId;
-            select.appendChild(option);
-          });
-        }
+    const select = document.getElementById('settingsBrandSpace');
+    if (select) {
+      select.innerHTML = '';
+      
+      if (this.brandSpaces.length === 0) {
+        select.innerHTML = '<option value="">No brand spaces found</option>';
+      } else {
+        select.innerHTML = '<option value="">Select brand space</option>';
+        this.brandSpaces.forEach(brand => {
+          const option = document.createElement('option');
+          option.value = brand.id;
+          option.textContent = brand.name;
+          option.selected = brand.id === this.settings.selectedBrandId;
+          select.appendChild(option);
+        });
       }
-    });
+    }
   }
 
   bindEvents() {
@@ -225,7 +195,6 @@ class XThreadsPopup {
   bindAgentEvents() {
     const keywordsInput = document.getElementById('agentKeywords');
     const toneSelect = document.getElementById('agentTone');
-    const brandSelect = document.getElementById('agentBrand');
     const agentToggle = document.getElementById('agentToggle');
 
     // Load current settings
@@ -246,11 +215,6 @@ class XThreadsPopup {
       this.saveSettings();
     });
 
-    brandSelect.addEventListener('change', (e) => {
-      this.settings.selectedBrandId = e.target.value;
-      this.saveSettings();
-    });
-
     agentToggle.addEventListener('change', (e) => {
       this.toggleAgent(e.target.checked);
     });
@@ -258,20 +222,33 @@ class XThreadsPopup {
 
   bindSettingsEvents() {
     const apiKeyInput = document.getElementById('settingsApiKey');
-    const brandSpaceSelect = document.getElementById('settingsBrandSpace');
     const keywordsInput = document.getElementById('settingsKeywords');
     const updateBtn = document.getElementById('updateApiKeyBtn');
+    const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
+    const cancelApiKeyBtn = document.getElementById('cancelApiKeyBtn');
     const saveBtn = document.getElementById('saveSettingsBtn');
+    const apiKeyInputGroup = document.getElementById('apiKeyInputGroup');
 
     // Load current settings
-    apiKeyInput.value = this.settings.apiKey;
     keywordsInput.value = this.settings.keywords.join(', ');
 
     // Set tone radio buttons
     const toneRadio = document.querySelector(`input[name="settingsTone"][value="${this.settings.tone}"]`);
     if (toneRadio) toneRadio.checked = true;
 
+    // API Key edit flow
     updateBtn.addEventListener('click', () => {
+      apiKeyInputGroup.style.display = 'block';
+      apiKeyInput.value = '';
+      apiKeyInput.focus();
+    });
+
+    cancelApiKeyBtn.addEventListener('click', () => {
+      apiKeyInputGroup.style.display = 'none';
+      apiKeyInput.value = '';
+    });
+
+    saveApiKeyBtn.addEventListener('click', () => {
       this.updateApiKey();
     });
 
@@ -297,7 +274,6 @@ class XThreadsPopup {
   async generateTweet() {
     const input = document.getElementById('generateInput');
     const tone = document.getElementById('generateTone').value;
-    const brandId = document.getElementById('generateBrand').value;
     const btn = document.getElementById('generateBtn');
     const results = document.getElementById('generateResults');
 
@@ -306,8 +282,8 @@ class XThreadsPopup {
       return;
     }
 
-    if (!brandId) {
-      this.showToast('Please select a brand space', 'error');
+    if (!this.settings.selectedBrandId) {
+      this.showToast('Please select a brand space in settings', 'error');
       return;
     }
 
@@ -322,7 +298,7 @@ class XThreadsPopup {
         },
         body: JSON.stringify({
           prompt: input.value.trim(),
-          brandId: brandId,
+          brandId: this.settings.selectedBrandId,
           tone: tone
         })
       });
@@ -353,7 +329,6 @@ class XThreadsPopup {
   async rewriteContent() {
     const input = document.getElementById('rewriteInput');
     const tone = document.getElementById('rewriteTone').value;
-    const brandId = document.getElementById('rewriteBrand').value;
     const btn = document.getElementById('rewriteBtn');
     const results = document.getElementById('rewriteResults');
 
@@ -362,8 +337,8 @@ class XThreadsPopup {
       return;
     }
 
-    if (!brandId) {
-      this.showToast('Please select a brand space', 'error');
+    if (!this.settings.selectedBrandId) {
+      this.showToast('Please select a brand space in settings', 'error');
       return;
     }
 
@@ -378,7 +353,7 @@ class XThreadsPopup {
         },
         body: JSON.stringify({
           originalContent: input.value.trim(),
-          brandId: brandId,
+          brandId: this.settings.selectedBrandId,
           tone: tone
         })
       });
@@ -411,7 +386,6 @@ class XThreadsPopup {
   async generateThread() {
     const input = document.getElementById('threadInput');
     const tone = document.getElementById('threadTone').value;
-    const brandId = document.getElementById('threadBrand').value;
     const btn = document.getElementById('threadBtn');
     const results = document.getElementById('threadResults');
 
@@ -420,8 +394,8 @@ class XThreadsPopup {
       return;
     }
 
-    if (!brandId) {
-      this.showToast('Please select a brand space', 'error');
+    if (!this.settings.selectedBrandId) {
+      this.showToast('Please select a brand space in settings', 'error');
       return;
     }
 
@@ -436,7 +410,7 @@ class XThreadsPopup {
         },
         body: JSON.stringify({
           prompt: input.value.trim(),
-          brandId: brandId,
+          brandId: this.settings.selectedBrandId,
           tone: tone
         })
       });
@@ -649,6 +623,9 @@ class XThreadsPopup {
         if (data.valid) {
           this.settings.apiKey = newApiKey;
           await this.saveSettings();
+          this.updateApiKeyDisplay();
+          document.getElementById('apiKeyInputGroup').style.display = 'none';
+          document.getElementById('settingsApiKey').value = '';
           await this.loadBrandSpaces();
           this.showToast('API key updated successfully!', 'success');
         } else {
@@ -723,6 +700,7 @@ class XThreadsPopup {
   }
 
   openSettings() {
+    this.updateApiKeyDisplay();
     document.getElementById('settingsModal').style.display = 'flex';
   }
 
@@ -753,6 +731,21 @@ class XThreadsPopup {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
+  }
+
+  updateApiKeyDisplay() {
+    const display = document.getElementById('currentApiKeyDisplay');
+    if (display) {
+      if (this.settings.apiKey) {
+        // Show first 8 characters + masked rest  
+        const maskedKey = this.settings.apiKey.substring(0, 8) + '••••••••••••••••';
+        display.textContent = maskedKey;
+        display.style.color = '#374151';
+      } else {
+        display.textContent = 'Not set';
+        display.style.color = '#9ca3af';
+      }
+    }
   }
 
   showToast(message, type = 'info') {

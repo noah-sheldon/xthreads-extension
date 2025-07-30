@@ -187,6 +187,62 @@ body {
   flex: 1;
 }
 
+.api-key-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px;
+  background: #f9fafb;
+  border: 1px solid #f3f4f6;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.api-key-masked {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+  color: #374151;
+  font-weight: 500;
+  flex: 1;
+}
+
+.api-key-edit-btn {
+  padding: 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #00BCD4;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.api-key-edit-btn:hover {
+  background: rgba(0, 188, 212, 0.1);
+  color: #00ACC1;
+  transform: translateY(-1px);
+}
+
+.api-key-input-group {
+  margin-top: 12px;
+}
+
+.api-key-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 12px;
+  min-width: auto;
+}
+
 .char-count {
   text-align: right;
   font-size: 12px;
