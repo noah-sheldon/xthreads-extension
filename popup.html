@@ -4,12 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>xThreads Agent</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
@@ -17,47 +11,91 @@
       <!-- Header -->
       <div class="header">
         <div class="logo">
-          <img src="assets/logo16.png" alt="xThreads" width="24" height="24" />
+          <img src="assets/icon16.png" alt="xThreads" width="20" height="20" />
           <span>xThreads</span>
         </div>
-        <div class="header-actions">
-          <div class="status-indicator" id="statusIndicator">
-            <div class="status-dot"></div>
-            <span id="statusText">Inactive</span>
-          </div>
-          <button id="settingsBtn" class="settings-btn" title="Settings">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"/>
-            </svg>
-          </button>
+        <div class="status-indicator">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">Inactive</span>
         </div>
+        <button id="settingsBtn" class="settings-btn" title="Settings">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 1v6m0 6v6" />
+            <path d="M1 12h6m6 0h6" />
+          </svg>
+        </button>
       </div>
 
       <!-- Tab Navigation -->
       <div class="tab-nav">
-        <button class="tab-btn active" data-tab="rewrite">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        <button class="tab-btn active" data-tab="generate">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+            />
+            <polyline points="14,2 14,8 20,8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+          </svg>
+          Generate
+        </button>
+        <button class="tab-btn" data-tab="rewrite">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+            />
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
           </svg>
           Rewrite
         </button>
         <button class="tab-btn" data-tab="thread">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14,2 14,8 20,8"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-            <polyline points="10,9 9,9 8,9"/>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <path d="M9 9h6v6H9V9z" />
           </svg>
           Thread
         </button>
         <button class="tab-btn" data-tab="agent">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-            <rect x="7" y="7" width="3" height="9"/>
-            <rect x="14" y="7" width="3" height="5"/>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <rect x="7" y="7" width="3" height="9" />
+            <rect x="14" y="7" width="3" height="5" />
           </svg>
           Agent
         </button>
@@ -65,14 +103,67 @@
 
       <!-- Tab Content -->
       <div class="tab-content">
+        <!-- Generate Tab -->
+        <div class="tab-pane active" id="generate-tab">
+          <div class="form-group">
+            <label class="label">What do you want to tweet about?</label>
+            <textarea
+              id="generateInput"
+              class="textarea"
+              placeholder="e.g., Write about the benefits of building in public for startups"
+              rows="4"
+            ></textarea>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="label">Tone</label>
+              <select id="generateTone" class="select">
+                <option value="neutral">Neutral</option>
+                <option value="professional">Professional</option>
+                <option value="casual">Casual</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="label">Brand Space</label>
+              <select id="generateBrand" class="select">
+                <option value="">Loading...</option>
+              </select>
+            </div>
+          </div>
+
+          <button id="generateBtn" class="btn-primary" disabled>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <polygon points="5,3 19,12 5,21" />
+            </svg>
+            Generate Tweet
+          </button>
+
+          <div
+            id="generateResults"
+            class="results-container"
+            style="display: none"
+          >
+            <h3>Generated Tweet:</h3>
+            <div id="generateVariations"></div>
+          </div>
+        </div>
+
         <!-- Rewrite Tab -->
-        <div class="tab-pane active" id="rewrite-tab">
+        <div class="tab-pane" id="rewrite-tab">
           <div class="form-group">
             <label class="label">Tweet to rewrite</label>
-            <textarea 
-              id="rewriteInput" 
-              class="textarea" 
-              placeholder="Write or paste your tweet here..."
+            <textarea
+              id="rewriteInput"
+              class="textarea"
+              placeholder="Paste your tweet here..."
               maxlength="280"
               rows="4"
             ></textarea>
@@ -86,50 +177,39 @@
               <label class="label">Tone</label>
               <select id="rewriteTone" class="select">
                 <option value="neutral">Neutral</option>
-                <option value="friendly">Friendly</option>
-                <option value="curious">Curious</option>
-                <option value="sarcastic">Sarcastic</option>
                 <option value="professional">Professional</option>
                 <option value="casual">Casual</option>
               </select>
             </div>
             <div class="form-group">
-              <label class="label">Language</label>
-              <select id="rewriteLanguage" class="select">
-                <option value="English">English</option>
-                <option value="Spanish">Spanish</option>
-                <option value="French">French</option>
-                <option value="German">German</option>
-                <option value="Portuguese">Portuguese</option>
-                <option value="Italian">Italian</option>
-                <option value="Hindi">Hindi</option>
-                <option value="Chinese">Chinese</option>
-                <option value="Japanese">Japanese</option>
-                <option value="Korean">Korean</option>
-                <option value="Russian">Russian</option>
-                <option value="Arabic">Arabic</option>
-                <option value="Turkish">Turkish</option>
-                <option value="Dutch">Dutch</option>
-                <option value="Swedish">Swedish</option>
-                <option value="Norwegian">Norwegian</option>
-                <option value="Danish">Danish</option>
-                <option value="Finnish">Finnish</option>
-                <option value="Polish">Polish</option>
-                <option value="Czech">Czech</option>
+              <label class="label">Brand Space</label>
+              <select id="rewriteBrand" class="select">
+                <option value="">Loading...</option>
               </select>
             </div>
           </div>
 
           <button id="rewriteBtn" class="btn-primary" disabled>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-              <circle cx="12" cy="12" r="3"/>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+              <circle cx="12" cy="12" r="3" />
             </svg>
-            Generate Rewrites
+            Rewrite
           </button>
 
-          <div id="rewriteResults" class="results-container" style="display: none;">
-            <h3>Rewritten versions:</h3>
+          <div
+            id="rewriteResults"
+            class="results-container"
+            style="display: none"
+          >
+            <h3>Rewritten Versions:</h3>
             <div id="rewriteVariations"></div>
           </div>
         </div>
@@ -138,11 +218,11 @@
         <div class="tab-pane" id="thread-tab">
           <div class="form-group">
             <label class="label">Thread content</label>
-            <textarea 
-              id="threadInput" 
-              class="textarea large" 
-              placeholder="Write your long-form content here. It will be automatically split into tweets..."
-              rows="8"
+            <textarea
+              id="threadInput"
+              class="textarea large"
+              placeholder="Write your long-form content here. It will be split into tweets..."
+              rows="6"
             ></textarea>
           </div>
 
@@ -151,55 +231,53 @@
               <label class="label">Tone</label>
               <select id="threadTone" class="select">
                 <option value="neutral">Neutral</option>
-                <option value="friendly">Friendly</option>
-                <option value="curious">Curious</option>
-                <option value="sarcastic">Sarcastic</option>
                 <option value="professional">Professional</option>
                 <option value="casual">Casual</option>
               </select>
             </div>
             <div class="form-group">
-              <label class="label">Language</label>
-              <select id="threadLanguage" class="select">
-                <option value="English">English</option>
-                <option value="Spanish">Spanish</option>
-                <option value="French">French</option>
-                <option value="German">German</option>
-                <option value="Portuguese">Portuguese</option>
-                <option value="Italian">Italian</option>
-                <option value="Hindi">Hindi</option>
-                <option value="Chinese">Chinese</option>
-                <option value="Japanese">Japanese</option>
-                <option value="Korean">Korean</option>
-                <option value="Russian">Russian</option>
-                <option value="Arabic">Arabic</option>
-                <option value="Turkish">Turkish</option>
-                <option value="Dutch">Dutch</option>
-                <option value="Swedish">Swedish</option>
-                <option value="Norwegian">Norwegian</option>
-                <option value="Danish">Danish</option>
-                <option value="Finnish">Finnish</option>
-                <option value="Polish">Polish</option>
-                <option value="Czech">Czech</option>
+              <label class="label">Brand Space</label>
+              <select id="threadBrand" class="select">
+                <option value="">Loading...</option>
               </select>
             </div>
           </div>
 
           <button id="threadBtn" class="btn-primary" disabled>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14,2 14,8 20,8"/>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+              />
+              <polyline points="14,2 14,8 20,8" />
             </svg>
             Generate Thread
           </button>
 
-          <div id="threadResults" class="results-container" style="display: none;">
-            <h3>Thread preview:</h3>
+          <div
+            id="threadResults"
+            class="results-container"
+            style="display: none"
+          >
+            <h3>Thread Preview:</h3>
             <div id="threadPreview"></div>
             <button id="postThreadBtn" class="btn-secondary">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 2L11 13"/>
-                <polygon points="22,2 15,22 11,13 2,9"/>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M22 2L11 13" />
+                <polygon points="22,2 15,22 11,13 2,9" />
               </svg>
               Post Thread
             </button>
@@ -211,25 +289,17 @@
           <div class="agent-status">
             <div class="status-card">
               <div class="status-info">
-                <h3>Agent Status</h3>
+                <h3>Agentic Reply</h3>
                 <div class="status-indicator-large">
-                  <div class="status-dot-large"></div>
+                  <div class="status-dot-large" id="agentStatusDot"></div>
                   <span id="agentStatusText">Inactive</span>
                 </div>
               </div>
-              <div class="agent-controls">
-                <button id="startAgentBtn" class="btn-primary">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polygon points="5,3 19,12 5,21"/>
-                  </svg>
-                  Start Agent
-                </button>
-                <button id="stopAgentBtn" class="btn-danger" style="display: none;">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="6" y="6" width="12" height="12"/>
-                  </svg>
-                  Stop Agent
-                </button>
+              <div class="agent-toggle">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="agentToggle" />
+                  <span class="slider"></span>
+                </label>
               </div>
             </div>
           </div>
@@ -246,58 +316,122 @@
           </div>
 
           <div class="form-group">
-            <label class="label">Keywords (comma-separated)</label>
-            <textarea 
-              id="agentKeywords" 
-              class="textarea" 
-              placeholder="AI, machine learning, tech, startup..."
+            <label class="label">Agentic Keywords</label>
+            <textarea
+              id="agentKeywords"
+              class="textarea"
+              placeholder="build in public, SaaS, marketing"
               rows="3"
             ></textarea>
+            <small>Comma-separated keywords for auto-reply monitoring</small>
           </div>
 
-          <div class="form-group">
-            <label class="label">Reply Tone</label>
-            <select id="agentTone" class="select">
-              <option value="neutral">Neutral</option>
-              <option value="friendly">Friendly</option>
-              <option value="curious">Curious</option>
-              <option value="sarcastic">Sarcastic</option>
-              <option value="professional">Professional</option>
-              <option value="casual">Casual</option>
-            </select>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="label">Tone</label>
+              <select id="agentTone" class="select">
+                <option value="neutral">Neutral</option>
+                <option value="professional">Professional</option>
+                <option value="casual">Casual</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="label">Brand Space</label>
+              <select id="agentBrand" class="select">
+                <option value="">Loading...</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Settings Modal -->
-    <div id="settingsModal" class="modal" style="display: none;">
+    <div id="settingsModal" class="modal" style="display: none">
       <div class="modal-content">
         <div class="modal-header">
           <h2>Settings</h2>
           <button id="closeSettings" class="close-btn">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label class="label">API Key</label>
+            <label class="label">API Key Management</label>
             <div class="input-group">
-              <input type="password" id="settingsApiKey" class="input" placeholder="Enter your xThreads API key">
-              <button id="fetchApiKeyBtn" class="btn-secondary" title="Auto-fetch from xthreads.app">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 12c0 1-1 1-1 1s-1 0-1-1 1-1 1-1 1 0 1 1"/>
-                  <path d="M16 12c0 1-1 1-1 1s-1 0-1-1 1-1 1-1 1 0 1 1"/>
-                  <path d="M11 12c0 1-1 1-1 1s-1 0-1-1 1-1 1-1 1 0 1 1"/>
-                </svg>
-              </button>
+              <input
+                type="password"
+                id="settingsApiKey"
+                class="input"
+                placeholder="Enter your xThreads API key"
+              />
+              <button id="updateApiKeyBtn" class="btn-secondary">Update</button>
             </div>
           </div>
+
           <div class="form-group">
-            <button id="saveSettingsBtn" class="btn-primary">Save Settings</button>
+            <label class="label">Brand Spaces</label>
+            <select id="settingsBrandSpace" class="select">
+              <option value="">Loading...</option>
+            </select>
+            <small>Current brand space for content generation</small>
+          </div>
+
+          <div class="form-group">
+            <label class="label">Keywords</label>
+            <textarea
+              id="settingsKeywords"
+              class="textarea"
+              placeholder="build in public, SaaS, marketing"
+              rows="3"
+            ></textarea>
+            <small>Keywords for agentic reply monitoring</small>
+          </div>
+
+          <div class="form-group">
+            <label class="label">Default Tone</label>
+            <div class="tone-selector">
+              <input
+                type="radio"
+                id="settingsNeutral"
+                name="settingsTone"
+                value="neutral"
+                checked
+              />
+              <label for="settingsNeutral">Neutral</label>
+
+              <input
+                type="radio"
+                id="settingsProfessional"
+                name="settingsTone"
+                value="professional"
+              />
+              <label for="settingsProfessional">Professional</label>
+
+              <input
+                type="radio"
+                id="settingsCasual"
+                name="settingsTone"
+                value="casual"
+              />
+              <label for="settingsCasual">Casual</label>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button id="saveSettingsBtn" class="btn-primary">
+              Save Settings
+            </button>
           </div>
         </div>
       </div>
@@ -306,7 +440,6 @@
     <!-- Toast Container -->
     <div id="toastContainer" class="toast-container"></div>
 
-    <script src="lib/constants.js"></script>
-    <script src="popup.js"></script>
+    <script type="module" src="popup.js"></script>
   </body>
 </html>

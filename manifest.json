@@ -2,9 +2,9 @@
   "manifest_version": 3,
   "name": "xThreads Extension",
   "version": "1.0.0",
-  "description": "AI-powered Twitter reply assistant for xthreads.app",
+  "description": "AI-powered content creation and agentic replies for X.com via xthreads.app",
   "permissions": ["activeTab", "scripting", "storage", "tabs", "declarativeContent"],
-  "host_permissions": ["https://www.xthreads.app/*"],
+  "host_permissions": ["https://www.xthreads.app/*", "https://xthreads.app/*"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "xThreads Agent"

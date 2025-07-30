@@ -2,279 +2,404 @@
 if (!window.__xthreads_injected__) {
   window.__xthreads_injected__ = true;
 
-class XThreadsAgent {
-  constructor() {
-    this.settings = null;
-    this.isActive = false;
-    this.repliedTweets = new Set();
-    this.lastActivity = Date.now();
-    this.failureCount = 0;
-    this.maxFailures = 3;
-    this.replyInterval = null;
-    this.activityCheckInterval = null;
-    
-    // Rate limiting
-    this.lastReplyTime = 0;
-    this.minReplyInterval = 20000; // 20 seconds minimum between replies
-    this.maxRepliesPerHour = 60;
-    this.replyTimes = [];
+  // Global stop typing state
+  let globalStopTyping = false;
 
-    this.init();
-  }
-
-  init() {
-    this.loadRepliedTweets();
-    this.setupActivityTracking();
-    this.setupMessageListener();
-    this.addOverlayButtons();
-    
-    // Clean up old reply times every hour
-    setInterval(() => this.cleanupReplyTimes(), 3600000);
-  }
-
-  setupMessageListener() {
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      switch (message.action) {
-        case 'startAgent':
-          this.startAgent(message.settings);
-          break;
-        case 'stopAgent':
-          this.stopAgent();
-          break;
-        case 'typeInComposer':
-          this.typeInComposer(message.text);
-          break;
-        case 'postThread':
-          this.postThread(message.thread);
-          break;
-      }
-    });
-  }
-
-  setupActivityTracking() {
-    let activityTimeout;
-    
-    const updateActivity = () => {
-      this.lastActivity = Date.now();
-      clearTimeout(activityTimeout);
+  class XThreadsContentScript {
+    constructor() {
+      this.settings = null;
+      this.isActive = false;
+      this.repliedTweets = new Set();
+      this.currentModal = null;
       
-      activityTimeout = setTimeout(() => {
-        if (this.isActive && this.settings?.mode === 'auto') {
-          console.log('User inactive, pausing auto replies');
-          this.pauseAutoMode();
-        }
-      }, 300000); // 5 minutes
-    };
-
-    document.addEventListener('mousemove', updateActivity);
-    document.addEventListener('keydown', updateActivity);
-    document.addEventListener('scroll', updateActivity);
-    document.addEventListener('click', updateActivity);
-
-    this.activityCheckInterval = setInterval(() => {
-      if (this.isActive && this.settings?.mode === 'auto') {
-        const isTabFocused = !document.hidden;
-        const isRecentActivity = Date.now() - this.lastActivity < 300000;
-        
-        if (!isTabFocused || !isRecentActivity) {
-          this.pauseAutoMode();
-        }
-      }
-    }, 30000);
-  }
-
-  async loadRepliedTweets() {
-    try {
-      const result = await chrome.storage.local.get('xthreads_replied_tweets');
-      if (result.xthreads_replied_tweets) {
-        const cutoff = Date.now() - (48 * 60 * 60 * 1000);
-        const validTweets = result.xthreads_replied_tweets.filter(
-          tweet => tweet.timestamp > cutoff
-        );
-        
-        this.repliedTweets = new Set(validTweets.map(t => t.id));
-        
-        await chrome.storage.local.set({
-          xthreads_replied_tweets: validTweets
-        });
-      }
-    } catch (error) {
-      console.error('Failed to load replied tweets:', error);
+      this.init();
     }
-  }
 
-  async saveRepliedTweet(tweetId) {
-    try {
-      const result = await chrome.storage.local.get('xthreads_replied_tweets');
-      const repliedTweets = result.xthreads_replied_tweets || [];
+    init() {
+      console.log('xThreads Content Script initialized');
+      this.setupMessageListener();
+      this.addInComposerButtons();
+      this.loadRepliedTweets();
       
-      repliedTweets.push({
-        id: tweetId,
-        timestamp: Date.now()
-      });
-      
-      await chrome.storage.local.set({
-        xthreads_replied_tweets: repliedTweets
-      });
-      
-      this.repliedTweets.add(tweetId);
-    } catch (error) {
-      console.error('Failed to save replied tweet:', error);
+      // Watch for new composers and tweets
+      this.setupDOMObserver();
     }
-  }
 
-  addOverlayButtons() {
-    this.addButtonsToTweets();
-    
-    const observer = new MutationObserver((mutations) => {
-      let shouldAddButtons = false;
-      
-      mutations.forEach((mutation) => {
-        mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === Node.ELEMENT_NODE) {
-            if (node.querySelector && (
-              node.querySelector('[data-testid="tweet"]') ||
-              node.matches('[data-testid="tweet"]')
-            )) {
-              shouldAddButtons = true;
+    setupMessageListener() {
+      chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        switch (message.action) {
+          case 'startAgent':
+            this.startAgent(message.settings);
+            sendResponse({ success: true });
+            break;
+
+          case 'stopAgent':
+            this.stopAgent();
+            sendResponse({ success: true });
+            break;
+
+          case 'typeInComposer':
+            this.typeInComposer(message.text);
+            sendResponse({ success: true });
+            break;
+
+          case 'postThread':
+            this.postThread(message.thread);
+            sendResponse({ success: true });
+            break;
+
+          case 'scanForAgenticReplies':
+            this.scanForAgenticReplies(message.settings);
+            sendResponse({ success: true });
+            break;
+
+          case 'showAgenticReplyNotification':
+            this.showAgenticReplyNotification(message.tweetData, message.reply);
+            sendResponse({ success: true });
+            break;
+        }
+      });
+    }
+
+    setupDOMObserver() {
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          mutation.addedNodes.forEach((node) => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              // Check for new composers
+              if (node.querySelector && (
+                node.querySelector('[data-testid="tweetTextarea_0"]') ||
+                node.matches('[data-testid="tweetTextarea_0"]')
+              )) {
+                setTimeout(() => this.addInComposerButtons(), 500);
+              }
+              
+              // Check for new tweets
+              if (node.querySelector && (
+                node.querySelector('[data-testid="tweet"]') ||
+                node.matches('[data-testid="tweet"]')
+              )) {
+                // New tweets detected - could be used for agentic monitoring
+              }
             }
-          }
+          });
         });
       });
-      
-      if (shouldAddButtons) {
-        setTimeout(() => this.addButtonsToTweets(), 1000);
-      }
-    });
 
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  }
-
-  addButtonsToTweets() {
-    const tweets = document.querySelectorAll('[data-testid="tweet"]');
-    
-    tweets.forEach(tweet => {
-      if (tweet.querySelector('.xthreads-overlay-btn')) return;
-      
-      const tweetId = this.extractTweetId(tweet);
-      if (!tweetId) return;
-
-      const actionBar = tweet.querySelector('[role="group"]');
-      if (!actionBar) return;
-
-      const overlayBtn = this.createOverlayButton(tweet, tweetId);
-      actionBar.appendChild(overlayBtn);
-    });
-  }
-
-  createOverlayButton(tweetElement, tweetId) {
-    const button = document.createElement('button');
-    button.className = 'xthreads-overlay-btn';
-    button.innerHTML = `
-      <img src="${chrome.runtime.getURL('assets/logo16.png')}" width="14" height="14" alt="xThreads" />
-    `;
-    
-    button.addEventListener('click', async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      await this.handleOverlayClick(tweetElement, tweetId);
-    });
-
-    return button;
-  }
-
-  async handleOverlayClick(tweetElement, tweetId) {
-    const tweetText = this.extractTweetText(tweetElement);
-    
-    // Show context menu or directly reply
-    const action = await this.showContextMenu(tweetText);
-    
-    if (action === 'reply') {
-      await this.handleReply(tweetElement, tweetId, tweetText);
-    } else if (action === 'rewrite') {
-      await this.handleRewrite(tweetText);
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
     }
-  }
 
-  async showContextMenu(tweetText) {
-    return new Promise((resolve) => {
-      const menu = document.createElement('div');
-      menu.className = 'xthreads-context-menu';
-      menu.innerHTML = `
-        <div class="context-menu-item" data-action="reply">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-          </svg>
-          Reply to this tweet
-        </div>
-        <div class="context-menu-item" data-action="rewrite">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-          </svg>
-          Rewrite this tweet
+    addInComposerButtons() {
+      // Find tweet composers
+      const composers = document.querySelectorAll('[data-testid="tweetTextarea_0"]');
+      
+      composers.forEach(composer => {
+        if (composer.closest('.xthreads-composer-enhanced')) return;
+        
+        const composerContainer = composer.closest('[data-testid="toolBar"]')?.parentElement;
+        if (!composerContainer) return;
+
+        // Mark as enhanced
+        composerContainer.classList.add('xthreads-composer-enhanced');
+
+        // Find toolbar or create button container
+        const toolbar = composerContainer.querySelector('[data-testid="toolBar"]');
+        if (toolbar && !toolbar.querySelector('.xthreads-composer-button')) {
+          this.injectComposerButton(toolbar, composer);
+        }
+      });
+    }
+
+    injectComposerButton(toolbar, composer) {
+      const button = document.createElement('button');
+      button.className = 'xthreads-composer-button';
+      button.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2L2 7L12 12L22 7L12 2Z"/>
+          <path d="M2 17L12 22L22 17"/>
+          <path d="M2 12L12 17L22 12"/>
+        </svg>
+        <span>AI</span>
+      `;
+      button.title = 'xThreads AI Assistant';
+      
+      button.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.showComposerModal(composer);
+      });
+
+      // Insert at the beginning of toolbar
+      toolbar.insertBefore(button, toolbar.firstChild);
+    }
+
+    showComposerModal(composer) {
+      if (this.currentModal) {
+        this.currentModal.remove();
+      }
+
+      const existingText = composer.textContent || '';
+      
+      const modal = document.createElement('div');
+      modal.className = 'xthreads-modal';
+      modal.innerHTML = `
+        <div class="xthreads-modal-overlay">
+          <div class="xthreads-modal-content">
+            <div class="xthreads-modal-header">
+              <h3>AI Content Assistant</h3>
+              <button class="xthreads-modal-close">×</button>
+            </div>
+            <div class="xthreads-modal-body">
+              <div class="xthreads-option-buttons">
+                <button class="xthreads-option-btn" data-action="generate">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5,3 19,12 5,21"/>
+                  </svg>
+                  Generate New
+                </button>
+                <button class="xthreads-option-btn" data-action="rewrite" ${!existingText ? 'disabled' : ''}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                  Rewrite Existing
+                </button>
+              </div>
+              
+              <div class="xthreads-content-form" style="display: none;">
+                <div class="xthreads-input-group">
+                  <label>Prompt:</label>
+                  <textarea class="xthreads-prompt-input" rows="3" placeholder="What do you want to write about?"></textarea>
+                </div>
+                
+                <div class="xthreads-form-row">
+                  <div class="xthreads-input-group">
+                    <label>Tone:</label>
+                    <select class="xthreads-tone-select">
+                      <option value="neutral">Neutral</option>
+                      <option value="professional">Professional</option>
+                      <option value="casual">Casual</option>
+                    </select>
+                  </div>
+                </div>
+                
+                <div class="xthreads-modal-actions">
+                  <button class="xthreads-btn-secondary xthreads-back-btn">Back</button>
+                  <button class="xthreads-btn-primary xthreads-generate-btn">Generate</button>
+                </div>
+              </div>
+              
+              <div class="xthreads-results" style="display: none;">
+                <div class="xthreads-results-header">
+                  <h4>Generated Content:</h4>
+                  <div class="xthreads-stop-typing" style="display: none;">
+                    <button class="xthreads-stop-btn">Stop Typing</button>
+                  </div>
+                </div>
+                <div class="xthreads-results-list"></div>
+              </div>
+            </div>
+          </div>
         </div>
       `;
-      
-      document.body.appendChild(menu);
-      
-      menu.addEventListener('click', (e) => {
-        const action = e.target.closest('.context-menu-item')?.dataset.action;
-        menu.remove();
-        resolve(action);
-      });
-      
-      // Remove menu after 5 seconds
-      setTimeout(() => {
-        if (menu.parentNode) {
-          menu.remove();
-          resolve(null);
-        }
-      }, 5000);
-    });
-  }
 
-  async handleReply(tweetElement, tweetId, tweetText) {
-    if (!this.settings?.apiKey) {
-      this.showToast('Please configure API key in extension popup', 'error');
-      return;
+      document.body.appendChild(modal);
+      this.currentModal = modal;
+
+      // Bind modal events
+      this.bindModalEvents(modal, composer, existingText);
     }
 
-    try {
-      const reply = await this.generateReply(tweetText, this.settings.tone || 'neutral');
-      
-      if (reply) {
-        await this.postReply(tweetElement, reply, tweetId);
-        this.showToast('Reply posted successfully!', 'success');
+    bindModalEvents(modal, composer, existingText) {
+      const closeBtn = modal.querySelector('.xthreads-modal-close');
+      const overlay = modal.querySelector('.xthreads-modal-overlay');
+      const optionButtons = modal.querySelectorAll('.xthreads-option-btn');
+      const contentForm = modal.querySelector('.xthreads-content-form');
+      const backBtn = modal.querySelector('.xthreads-back-btn');
+      const generateBtn = modal.querySelector('.xthreads-generate-btn');
+      const promptInput = modal.querySelector('.xthreads-prompt-input');
+      const stopBtn = modal.querySelector('.xthreads-stop-btn');
+
+      // Close modal
+      const closeModal = () => {
+        globalStopTyping = true;
+        modal.remove();
+        this.currentModal = null;
+      };
+
+      closeBtn.addEventListener('click', closeModal);
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeModal();
+      });
+
+      // Option selection
+      optionButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const action = btn.dataset.action;
+          
+          // Hide option buttons, show form
+          modal.querySelector('.xthreads-option-buttons').style.display = 'none';
+          contentForm.style.display = 'block';
+          
+          // Pre-fill for rewrite
+          if (action === 'rewrite' && existingText) {
+            promptInput.value = existingText;
+            promptInput.placeholder = 'Edit the content above or describe how to rewrite it...';
+          }
+          
+          generateBtn.dataset.action = action;
+        });
+      });
+
+      // Back button
+      backBtn.addEventListener('click', () => {
+        modal.querySelector('.xthreads-option-buttons').style.display = 'block';
+        contentForm.style.display = 'none';
+        modal.querySelector('.xthreads-results').style.display = 'none';
+      });
+
+      // Generate button
+      generateBtn.addEventListener('click', () => {
+        this.handleModalGenerate(modal, composer, generateBtn.dataset.action);
+      });
+
+      // Stop typing button
+      stopBtn.addEventListener('click', () => {
+        globalStopTyping = true;
+        modal.querySelector('.xthreads-stop-typing').style.display = 'none';
+      });
+
+      // Focus prompt input
+      setTimeout(() => promptInput.focus(), 100);
+    }
+
+    async handleModalGenerate(modal, composer, action) {
+      const promptInput = modal.querySelector('.xthreads-prompt-input');
+      const toneSelect = modal.querySelector('.xthreads-tone-select');
+      const generateBtn = modal.querySelector('.xthreads-generate-btn');
+      const resultsContainer = modal.querySelector('.xthreads-results');
+      const resultsList = modal.querySelector('.xthreads-results-list');
+
+      const prompt = promptInput.value.trim();
+      if (!prompt) {
+        this.showToast('Please enter a prompt', 'error');
+        return;
       }
-    } catch (error) {
-      console.error('Reply failed:', error);
-      this.showToast('Failed to generate reply', 'error');
-    }
-  }
 
-  async handleRewrite(tweetText) {
-    // Open popup with the tweet text pre-filled
-    try {
-      await chrome.runtime.sendMessage({
-        action: 'openPopupWithText',
-        text: tweetText,
-        tab: 'rewrite'
+      // Get settings from storage
+      const settings = await this.getSettings();
+      if (!settings.apiKey || !settings.selectedBrandId) {
+        this.showToast('Please configure API key and brand space in extension settings', 'error');
+        return;
+      }
+
+      // Show loading
+      generateBtn.disabled = true;
+      generateBtn.textContent = 'Generating...';
+
+      try {
+        let endpoint, body;
+        
+        if (action === 'generate') {
+          endpoint = 'https://www.xthreads.app/api/generate-tweet';
+          body = {
+            prompt: prompt,
+            brandId: settings.selectedBrandId,
+            tone: toneSelect.value
+          };
+        } else {
+          endpoint = 'https://www.xthreads.app/api/rewrite-content';
+          body = {
+            originalContent: prompt,
+            brandId: settings.selectedBrandId,
+            tone: toneSelect.value
+          };
+        }
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': settings.apiKey
+          },
+          body: JSON.stringify(body)
+        });
+
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+        let results = [];
+        
+        if (action === 'generate') {
+          results = [data.tweet];
+        } else {
+          results = data.variations || [data.rewrittenContent];
+        }
+
+        // Validate and truncate results
+        results = results.filter(Boolean).map(content => {
+          if (content.length > 280) {
+            this.showToast('Content truncated to 280 characters', 'info');
+            return content.substring(0, 277) + '...';
+          }
+          return content;
+        });
+
+        if (results.length === 0) {
+          throw new Error('No content generated');
+        }
+
+        // Show results
+        this.displayModalResults(modal, results, composer);
+
+      } catch (error) {
+        console.error('Failed to generate content:', error);
+        this.showToast('Failed to generate content. Please try again.', 'error');
+      } finally {
+        generateBtn.disabled = false;
+        generateBtn.textContent = 'Generate';
+      }
+    }
+
+    displayModalResults(modal, results, composer) {
+      const resultsContainer = modal.querySelector('.xthreads-results');
+      const resultsList = modal.querySelector('.xthreads-results-list');
+      
+      resultsContainer.style.display = 'block';
+      resultsList.innerHTML = '';
+
+      results.forEach((content, index) => {
+        const resultItem = document.createElement('div');
+        resultItem.className = 'xthreads-result-item';
+        resultItem.innerHTML = `
+          <div class="xthreads-result-text">${content}</div>
+          <div class="xthreads-result-actions">
+            <button class="xthreads-use-btn" data-content="${this.escapeHtml(content)}">Use This</button>
+          </div>
+        `;
+        
+        resultsList.appendChild(resultItem);
       });
-    } catch (error) {
-      console.error('Failed to open popup:', error);
-    }
-  }
 
-  async typeInComposer(text) {
-    try {
-      // Find the main tweet composer
+      // Bind use buttons
+      resultsList.querySelectorAll('.xthreads-use-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const content = btn.dataset.content;
+          this.typeTextIntoComposer(composer, content);
+          modal.remove();
+          this.currentModal = null;
+        });
+      });
+    }
+
+    async typeInComposer(text) {
       const composer = document.querySelector('[data-testid="tweetTextarea_0"]') ||
-                      document.querySelector('[role="textbox"][data-testid="tweetTextarea_0"]') ||
-                      document.querySelector('div[role="textbox"][contenteditable="true"]');
+                      document.querySelector('[role="textbox"][contenteditable="true"]');
       
       if (!composer) {
         // Try to open composer
@@ -289,459 +414,339 @@ class XThreadsAgent {
         
         throw new Error('Tweet composer not found');
       }
+
+      await this.typeTextIntoComposer(composer, text);
+    }
+
+    async typeTextIntoComposer(composer, text) {
+      // Reset global stop state
+      globalStopTyping = false;
       
-      // Clear existing text and type new text
+      // Show stop button if modal is open
+      if (this.currentModal) {
+        const stopContainer = this.currentModal.querySelector('.xthreads-stop-typing');
+        if (stopContainer) stopContainer.style.display = 'block';
+      }
+
       composer.focus();
       composer.textContent = '';
-      
-      await this.simulateTyping(composer, text);
-      
-      // Wait a moment then click post
-      await this.sleep(1000);
-      
-      const postButton = document.querySelector('[data-testid="tweetButtonInline"]') ||
-                        document.querySelector('[data-testid="tweetButton"]');
-      
-      if (postButton && !postButton.disabled) {
-        postButton.click();
-      }
-      
-    } catch (error) {
-      console.error('Failed to type in composer:', error);
-      throw error;
-    }
-  }
 
-  async postThread(thread) {
-    try {
-      // Navigate to compose if not already there
-      if (!window.location.href.includes('/compose/tweet')) {
-        window.location.href = 'https://x.com/compose/tweet';
-        await this.sleep(3000);
-      }
-      
-      for (let i = 0; i < thread.length; i++) {
-        const tweet = thread[i];
+      // Type character by character with human-like delays
+      for (let i = 0; i < text.length; i++) {
+        if (globalStopTyping) {
+          console.log('Typing stopped by user');
+          break;
+        }
+
+        const char = text[i];
+        composer.textContent = text.substring(0, i + 1);
         
-        // Find the current tweet composer
-        const composer = document.querySelector('[data-testid="tweetTextarea_0"]') ||
-                        document.querySelector(`[data-testid="tweetTextarea_${i}"]`) ||
-                        document.querySelector('div[role="textbox"][contenteditable="true"]');
+        // Trigger input events for X.com recognition
+        composer.dispatchEvent(new Event('input', { bubbles: true }));
+        composer.dispatchEvent(new Event('change', { bubbles: true }));
         
-        if (!composer) {
-          throw new Error(`Tweet composer not found for tweet ${i + 1}`);
+        // Variable delays: 50-150ms, longer for punctuation
+        let delay = Math.floor(Math.random() * 100) + 50; // 50-150ms
+        if (['.', '!', '?', ',', ';', ':'].includes(char)) {
+          delay += Math.floor(Math.random() * 200) + 100; // +100-300ms for punctuation
+        }
+        if (char === '\n') {
+          delay += Math.floor(Math.random() * 300) + 200; // +200-500ms for newlines
         }
         
-        // Type the tweet
-        composer.focus();
-        composer.textContent = '';
-        await this.simulateTyping(composer, tweet);
+        await this.sleep(delay);
+      }
+
+      // Hide stop button
+      if (this.currentModal) {
+        const stopContainer = this.currentModal.querySelector('.xthreads-stop-typing');
+        if (stopContainer) stopContainer.style.display = 'none';
+      }
+
+      // Final events
+      composer.dispatchEvent(new Event('input', { bubbles: true }));
+      composer.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    async postThread(thread) {
+      if (!thread || thread.length === 0) return;
+
+      try {
+        // Navigate to compose if not already there
+        if (!window.location.href.includes('/compose/tweet')) {
+          window.location.href = 'https://x.com/compose/tweet';
+          await this.sleep(3000);
+        }
         
-        // Add next tweet if not the last one
-        if (i < thread.length - 1) {
-          const addTweetBtn = document.querySelector('[data-testid="addButton"]') ||
-                             document.querySelector('[aria-label="Add tweet"]');
+        for (let i = 0; i < thread.length; i++) {
+          if (globalStopTyping) break;
           
-          if (addTweetBtn) {
-            addTweetBtn.click();
-            await this.sleep(1000);
+          const tweet = thread[i];
+          
+          // Find the current tweet composer
+          const composer = document.querySelector('[data-testid="tweetTextarea_0"]') ||
+                          document.querySelector(`[data-testid="tweetTextarea_${i}"]`) ||
+                          document.querySelector('div[role="textbox"][contenteditable="true"]');
+          
+          if (!composer) {
+            throw new Error(`Tweet composer not found for tweet ${i + 1}`);
+          }
+          
+          // Type the tweet
+          await this.typeTextIntoComposer(composer, tweet);
+          
+          if (globalStopTyping) break;
+          
+          // Add next tweet if not the last one
+          if (i < thread.length - 1) {
+            const addTweetBtn = document.querySelector('[data-testid="addButton"]') ||
+                               document.querySelector('[aria-label="Add tweet"]');
+            
+            if (addTweetBtn) {
+              addTweetBtn.click();
+              await this.sleep(1000);
+            }
           }
         }
-      }
-      
-      // Post the entire thread
-      await this.sleep(1000);
-      const postAllBtn = document.querySelector('[data-testid="tweetButton"]');
-      
-      if (postAllBtn && !postAllBtn.disabled) {
-        postAllBtn.click();
-      }
-      
-    } catch (error) {
-      console.error('Failed to post thread:', error);
-      throw error;
-    }
-  }
-
-  async simulateTyping(element, text) {
-    element.focus();
-    
-    for (let i = 0; i < text.length; i++) {
-      element.textContent = text.substring(0, i + 1);
-      
-      // Trigger input events
-      element.dispatchEvent(new Event('input', { bubbles: true }));
-      element.dispatchEvent(new Event('change', { bubbles: true }));
-      
-      // Random typing delay (30-100ms)
-      await this.sleep(this.getRandomInterval(30, 100));
-    }
-    
-    // Final events
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-    element.dispatchEvent(new Event('change', { bubbles: true }));
-    
-    // Wait a bit more to ensure the post button is enabled
-    await this.sleep(500);
-  }
-
-  startAgent(settings) {
-    this.settings = settings;
-    this.isActive = true;
-    this.failureCount = 0;
-
-    console.log('xThreads Agent started');
-
-    if (settings.mode === 'auto') {
-      this.startAutoMode();
-    }
-  }
-
-  stopAgent() {
-    this.isActive = false;
-    
-    if (this.replyInterval) {
-      clearInterval(this.replyInterval);
-      this.replyInterval = null;
-    }
-
-    console.log('xThreads Agent stopped');
-  }
-
-  startAutoMode() {
-    if (this.replyInterval) {
-      clearInterval(this.replyInterval);
-    }
-
-    this.replyInterval = setInterval(() => {
-      if (this.isActive && this.settings?.mode === 'auto') {
-        this.processAutoReplies();
-      }
-    }, this.getRandomInterval(30000, 60000));
-
-    setTimeout(() => {
-      if (this.isActive) {
-        this.processAutoReplies();
-      }
-    }, 2000);
-  }
-
-  pauseAutoMode() {
-    if (this.replyInterval) {
-      clearInterval(this.replyInterval);
-      this.replyInterval = null;
-    }
-    console.log('Auto mode paused due to inactivity');
-  }
-
-  async processAutoReplies() {
-    if (!this.canReply()) {
-      console.log('Rate limit reached, skipping auto replies');
-      return;
-    }
-
-    try {
-      const tweets = this.findMatchingTweets();
-      const validTweets = tweets.slice(0, 3);
-
-      console.log(`Found ${validTweets.length} matching tweets for auto reply`);
-
-      for (const tweet of validTweets) {
-        if (!this.isActive) break;
         
-        const tweetId = this.extractTweetId(tweet);
-        if (!tweetId || this.repliedTweets.has(tweetId)) continue;
+        this.showToast('Thread ready to post! Click the Post button to publish.', 'success');
+        
+      } catch (error) {
+        console.error('Failed to post thread:', error);
+        this.showToast('Failed to prepare thread. Please try again.', 'error');
+      }
+    }
 
-        try {
-          const tweetText = this.extractTweetText(tweet);
-          const reply = await this.generateReply(tweetText, this.settings.tone);
+    // Agentic Reply Functions
+    startAgent(settings) {
+      this.settings = settings;
+      this.isActive = true;
+      console.log('xThreads Agent started');
+    }
+
+    stopAgent() {
+      this.isActive = false;
+      console.log('xThreads Agent stopped');
+    }
+
+    async scanForAgenticReplies(settings) {
+      if (!this.isActive || !settings) return;
+
+      try {
+        // Wait for page to load completely
+        await this.sleep(2000);
+
+        // Find tweets on search results page
+        const tweets = document.querySelectorAll('[data-testid="tweet"]');
+        
+        for (const tweet of tweets) {
+          const tweetData = this.extractTweetData(tweet);
           
-          if (reply) {
-            const delay = this.getRandomInterval(5000, 30000);
-            await this.sleep(delay);
+          if (tweetData && this.shouldReplyToTweet(tweetData, settings)) {
+            // Send to background script for processing
+            chrome.runtime.sendMessage({
+              action: 'agenticReplyRequest',
+              tweetData: tweetData
+            });
             
-            if (!this.isActive) break;
-            
-            await this.postReply(tweet, reply, tweetId);
-            console.log('Auto reply posted successfully');
-            
-            this.updateStats('success');
-          }
-        } catch (error) {
-          console.error('Auto reply failed:', error);
-          this.handleReplyFailure();
-          
-          if (this.failureCount >= this.maxFailures) {
-            this.pauseAutoMode();
-            this.showToast('Too many failures, auto mode paused', 'error');
+            // Only process one tweet per scan to avoid spam
             break;
           }
         }
+        
+      } catch (error) {
+        console.error('Failed to scan for agentic replies:', error);
       }
-    } catch (error) {
-      console.error('Error processing auto replies:', error);
     }
-  }
 
-  findMatchingTweets() {
-    const tweets = Array.from(document.querySelectorAll('[data-testid="tweet"]'));
-    const keywords = this.settings.keywords.map(k => k.toLowerCase());
-    
-    return tweets.filter(tweet => {
-      const tweetId = this.extractTweetId(tweet);
-      if (!tweetId || this.repliedTweets.has(tweetId)) return false;
+    extractTweetData(tweetElement) {
+      try {
+        const textElement = tweetElement.querySelector('[data-testid="tweetText"]');
+        const linkElement = tweetElement.querySelector('a[href*="/status/"]');
+        const timeElement = tweetElement.querySelector('time');
+        
+        if (!textElement || !linkElement) return null;
+        
+        const content = textElement.textContent.trim();
+        const tweetUrl = linkElement.href;
+        const tweetId = tweetUrl.match(/\/status\/(\d+)/)?.[1];
+        const timestamp = timeElement ? new Date(timeElement.dateTime).getTime() : Date.now();
+        
+        return {
+          id: tweetId,
+          content: content,
+          url: tweetUrl,
+          timestamp: timestamp
+        };
+      } catch (error) {
+        console.error('Failed to extract tweet data:', error);
+        return null;
+      }
+    }
+
+    shouldReplyToTweet(tweetData, settings) {
+      // Check if already replied
+      if (this.repliedTweets.has(tweetData.id)) return false;
       
-      const tweetText = this.extractTweetText(tweet).toLowerCase();
+      // Check if tweet is recent (within last hour)
+      const oneHourAgo = Date.now() - (60 * 60 * 1000);
+      if (tweetData.timestamp < oneHourAgo) return false;
       
-      const hasKeyword = keywords.some(keyword => 
-        tweetText.includes(keyword)
+      // Check if tweet contains keywords
+      const content = tweetData.content.toLowerCase();
+      const hasKeyword = settings.keywords.some(keyword => 
+        content.includes(keyword.toLowerCase())
       );
       
-      if (!hasKeyword) return false;
+      return hasKeyword;
+    }
+
+    showAgenticReplyNotification(tweetData, reply) {
+      // Remove existing notifications
+      const existing = document.querySelector('.xthreads-agentic-notification');
+      if (existing) existing.remove();
+
+      const notification = document.createElement('div');
+      notification.className = 'xthreads-agentic-notification';
+      notification.innerHTML = `
+        <div class="xthreads-notification-content">
+          <div class="xthreads-notification-header">
+            <h4>Agentic Reply Suggestion</h4>
+            <button class="xthreads-notification-close">×</button>
+          </div>
+          <div class="xthreads-notification-body">
+            <div class="xthreads-original-tweet">
+              <strong>Original Tweet:</strong>
+              <p>${tweetData.content.substring(0, 100)}${tweetData.content.length > 100 ? '...' : ''}</p>
+            </div>
+            <div class="xthreads-suggested-reply">
+              <strong>Suggested Reply:</strong>
+              <p>${reply}</p>
+            </div>
+          </div>
+          <div class="xthreads-notification-actions">
+            <button class="xthreads-btn-secondary xthreads-dismiss-btn">Dismiss</button>
+            <button class="xthreads-btn-primary xthreads-review-btn">Review & Reply</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(notification);
+
+      // Bind notification events
+      const closeBtn = notification.querySelector('.xthreads-notification-close');
+      const dismissBtn = notification.querySelector('.xthreads-dismiss-btn');
+      const reviewBtn = notification.querySelector('.xthreads-review-btn');
+
+      const removeNotification = () => notification.remove();
+
+      closeBtn.addEventListener('click', removeNotification);
+      dismissBtn.addEventListener('click', removeNotification);
       
-      const replyCount = this.getReplyCount(tweet);
-      const isRecent = this.isTweetRecent(tweet);
-      const isFromVerified = this.isTweetFromVerified(tweet);
-      
-      return replyCount < 10 && isRecent && !isFromVerified;
-    });
-  }
-
-  extractTweetId(tweetElement) {
-    const link = tweetElement.querySelector('a[href*="/status/"]');
-    if (link) {
-      const match = link.href.match(/\/status\/(\d+)/);
-      return match ? match[1] : null;
-    }
-    
-    const text = this.extractTweetText(tweetElement);
-    return text ? this.hashCode(text).toString() : null;
-  }
-
-  extractTweetText(tweetElement) {
-    const textSelectors = [
-      '[data-testid="tweetText"]',
-      '[lang]',
-      '.css-901oao.css-16my406.r-poiln3.r-bcqeeo.r-qvutc0'
-    ];
-    
-    for (const selector of textSelectors) {
-      const textElement = tweetElement.querySelector(selector);
-      if (textElement) {
-        return textElement.textContent.trim();
-      }
-    }
-    
-    const allText = tweetElement.textContent || '';
-    return allText.replace(/\s+/g, ' ').trim().substring(0, 500);
-  }
-
-  getReplyCount(tweetElement) {
-    const replyButton = tweetElement.querySelector('[data-testid="reply"]');
-    if (replyButton) {
-      const countElement = replyButton.querySelector('[data-testid="app-text-transition-container"]');
-      if (countElement) {
-        const count = parseInt(countElement.textContent) || 0;
-        return count;
-      }
-    }
-    return 0;
-  }
-
-  isTweetRecent(tweetElement) {
-    const timeElement = tweetElement.querySelector('time');
-    if (timeElement) {
-      const tweetTime = new Date(timeElement.dateTime);
-      const now = new Date();
-      const diffMinutes = (now - tweetTime) / (1000 * 60);
-      return diffMinutes < 60;
-    }
-    return true;
-  }
-
-  isTweetFromVerified(tweetElement) {
-    const verifiedBadge = tweetElement.querySelector('[data-testid="icon-verified"]');
-    return !!verifiedBadge;
-  }
-
-  async generateReply(tweetText, tone = 'neutral') {
-    try {
-      const response = await fetch('https://www.xthreads.app/api/ai-reply', {
-        method: 'POST',
-        mode: 'cors',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': this.settings.apiKey
-        },
-        body: JSON.stringify({
-          tweet: tweetText,
-          tone: tone
-        })
+      reviewBtn.addEventListener('click', async () => {
+        removeNotification();
+        await this.handleAgenticReply(tweetData, reply);
       });
 
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
-      }
+      // Auto-dismiss after 30 seconds
+      setTimeout(removeNotification, 30000);
+    }
 
-      const data = await response.json();
-      
-      if (data.reply) {
-        return this.cleanReply(data.reply);
-      } else {
-        throw new Error('No reply generated');
+    async handleAgenticReply(tweetData, reply) {
+      try {
+        // Navigate to tweet
+        window.location.href = tweetData.url;
+        await this.sleep(3000);
+
+        // Find and click reply button
+        const replyButton = document.querySelector('[data-testid="reply"]');
+        if (!replyButton) {
+          throw new Error('Reply button not found');
+        }
+
+        replyButton.click();
+        await this.sleep(1500);
+
+        // Find reply composer
+        const replyComposer = document.querySelector('[data-testid="tweetTextarea_0"]') ||
+                             document.querySelector('[role="textbox"][contenteditable="true"]');
+
+        if (!replyComposer) {
+          throw new Error('Reply composer not found');
+        }
+
+        // Type the reply
+        await this.typeTextIntoComposer(replyComposer, reply);
+        
+        this.showToast('Reply ready! Click Post to send your response.', 'success');
+
+        // Update stats
+        chrome.runtime.sendMessage({
+          action: 'updateStats',
+          stats: { successCount: 1, repliesCount: 1 }
+        });
+
+      } catch (error) {
+        console.error('Failed to handle agentic reply:', error);
+        this.showToast('Failed to prepare reply. Please try manually.', 'error');
       }
-    } catch (error) {
-      console.error('Failed to generate reply:', error);
-      throw error;
+    }
+
+    async loadRepliedTweets() {
+      try {
+        const result = await chrome.storage.local.get('xthreads_replied_tweets');
+        if (result.xthreads_replied_tweets) {
+          const cutoff = Date.now() - (24 * 60 * 60 * 1000); // 24 hours
+          const validTweets = result.xthreads_replied_tweets.filter(
+            tweet => tweet.timestamp > cutoff
+          );
+          
+          this.repliedTweets = new Set(validTweets.map(t => t.id));
+        }
+      } catch (error) {
+        console.error('Failed to load replied tweets:', error);
+      }
+    }
+
+    async getSettings() {
+      try {
+        const result = await chrome.storage.local.get('xthreads_settings');
+        return result.xthreads_settings || {};
+      } catch (error) {
+        console.error('Failed to get settings:', error);
+        return {};
+      }
+    }
+
+    // Utility Functions
+    sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    escapeHtml(text) {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      toast.className = `xthreads-toast xthreads-toast-${type}`;
+      toast.textContent = message;
+      
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.remove();
+        }
+      }, 4000);
     }
   }
 
-  cleanReply(reply) {
-    let cleaned = reply
-      .replace(/#\w+/g, '')
-      .replace(/[^\w\s.,?!]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-    
-    if (cleaned.length > 250) {
-      cleaned = cleaned.substring(0, 247) + '...';
-    }
-    
-    if (cleaned.toLowerCase().includes('as an ai') || 
-        cleaned.toLowerCase().includes('i am an ai') ||
-        cleaned.toLowerCase().includes('artificial intelligence')) {
-      throw new Error('Reply appears too robotic');
-    }
-    
-    return cleaned;
-  }
-
-  async postReply(tweetElement, replyText, tweetId) {
-    try {
-      const replyButton = tweetElement.querySelector('[data-testid="reply"]');
-      if (!replyButton) {
-        throw new Error('Reply button not found');
-      }
-      
-      replyButton.click();
-      await this.sleep(1500);
-      
-      const replyTextArea = document.querySelector('[data-testid="tweetTextarea_0"]') ||
-                           document.querySelector('[role="textbox"][data-testid="tweetTextarea_0"]') ||
-                           document.querySelector('div[role="textbox"][contenteditable="true"]');
-      
-      if (!replyTextArea) {
-        throw new Error('Reply text area not found');
-      }
-      
-      replyTextArea.focus();
-      replyTextArea.textContent = '';
-      
-      await this.simulateTyping(replyTextArea, replyText);
-      await this.sleep(1000);
-      
-      const postButton = document.querySelector('[data-testid="tweetButtonInline"]') ||
-                        document.querySelector('[data-testid="tweetButton"]');
-      
-      if (postButton && !postButton.disabled) {
-        postButton.click();
-        await this.sleep(2000);
-        await this.saveRepliedTweet(tweetId);
-        this.recordReply();
-        console.log('Reply posted successfully');
-      } else {
-        throw new Error('Post button not found or disabled');
-      }
-      
-    } catch (error) {
-      console.error('Failed to post reply:', error);
-      
-      const closeButton = document.querySelector('[data-testid="app-bar-close"]');
-      if (closeButton) {
-        closeButton.click();
-      }
-      
-      throw error;
-    }
-  }
-
-  canReply() {
-    const now = Date.now();
-    
-    if (now - this.lastReplyTime < this.minReplyInterval) {
-      return false;
-    }
-    
-    this.cleanupReplyTimes();
-    return this.replyTimes.length < this.maxRepliesPerHour;
-  }
-
-  recordReply() {
-    const now = Date.now();
-    this.lastReplyTime = now;
-    this.replyTimes.push(now);
-    this.cleanupReplyTimes();
-  }
-
-  cleanupReplyTimes() {
-    const oneHourAgo = Date.now() - 3600000;
-    this.replyTimes = this.replyTimes.filter(time => time > oneHourAgo);
-  }
-
-  handleReplyFailure() {
-    this.failureCount++;
-    this.updateStats('failure');
-  }
-
-  updateStats(type) {
-    chrome.runtime.sendMessage({
-      action: 'updateStats',
-      stats: {
-        repliesCount: type === 'success' ? 1 : 0,
-        successCount: type === 'success' ? 1 : 0,
-        totalAttempts: 1
-      }
-    });
-  }
-
-  getRandomInterval(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-  }
-
-  sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  hashCode(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
-    }
-    return Math.abs(hash);
-  }
-
-  showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.className = `xthreads-toast xthreads-toast-${type}`;
-    toast.textContent = message;
-    
-    document.body.appendChild(toast);
-    
-    setTimeout(() => {
-      toast.remove();
-    }, 4000);
-  }
-}
-
-// Initialize agent when page loads
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    new XThreadsAgent();
-  });
-} else {
-  new XThreadsAgent();
-}
-
+  // Initialize content script
+  new XThreadsContentScript();
 }

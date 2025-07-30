@@ -1,13 +1,14 @@
 class XThreadsOnboarding {
   constructor() {
     this.currentStep = 1;
+    this.validatedApiKey = '';
+    this.brandSpaces = [];
     this.settings = {
-      apiKey: "",
+      apiKey: '',
+      selectedBrandId: '',
       keywords: [],
-      tone: "neutral",
-      mode: "manual",
-      isActive: false,
-      isOnboarded: false,
+      tone: 'neutral',
+      isOnboarded: false
     };
 
     this.init();
@@ -15,243 +16,291 @@ class XThreadsOnboarding {
 
   init() {
     this.bindEvents();
-    this.updateProgress();
+    this.updateStepIndicator();
   }
 
   bindEvents() {
-    // API Key validation
-    const apiKeyInput = document.getElementById("onboardingApiKey");
-    const validateBtn = document.getElementById("validateApiKey");
+    // Step 1: API Key input and validation
+    const apiKeyInput = document.getElementById('apiKey');
+    const nextBtn = document.getElementById('nextBtn');
 
-    apiKeyInput.addEventListener("input", (e) => {
+    apiKeyInput.addEventListener('input', (e) => {
       const apiKey = e.target.value.trim();
-      validateBtn.disabled = apiKey.length < 10;
-
-      // Clear previous validation messages
-      const validationMsg = document.getElementById("apiKeyValidation");
-      validationMsg.textContent = "";
-      validationMsg.className = "validation-message";
+      nextBtn.disabled = apiKey.length < 10;
+      
+      // Clear error message when typing
+      const errorMsg = document.getElementById('errorMessage');
+      errorMsg.textContent = '';
     });
 
-    validateBtn.addEventListener("click", () => {
+    nextBtn.addEventListener('click', () => {
       this.validateApiKey();
     });
 
-    // Keywords input
-    const keywordsInput = document.getElementById("onboardingKeywords");
-    keywordsInput.addEventListener("input", (e) => {
-      this.settings.keywords = e.target.value
-        .split(",")
-        .map((k) => k.trim())
-        .filter((k) => k.length > 0);
-    });
+    // Step 2: Settings configuration
+    const backBtn = document.getElementById('backBtn');
+    const finishBtn = document.getElementById('finishBtn');
+    const keywordsInput = document.getElementById('keywords');
 
-    // Tone selection
-    document.querySelectorAll(".tone-option").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        document
-          .querySelectorAll(".tone-option")
-          .forEach((b) => b.classList.remove("active"));
-        e.currentTarget.classList.add("active");
-        this.settings.tone = e.currentTarget.dataset.tone;
-      });
-    });
-
-    // Navigation buttons
-    document.getElementById("backToStep1").addEventListener("click", () => {
+    backBtn.addEventListener('click', () => {
       this.goToStep(1);
     });
 
-    document.getElementById("continueToStep3").addEventListener("click", () => {
-      this.goToStep(3);
+    keywordsInput.addEventListener('input', (e) => {
+      this.settings.keywords = e.target.value
+        .split(',')
+        .map(k => k.trim())
+        .filter(k => k.length > 0);
     });
 
-    document.getElementById("backToStep2").addEventListener("click", () => {
-      this.goToStep(2);
-    });
-
-    document
-      .getElementById("finishOnboarding")
-      .addEventListener("click", () => {
-        this.finishOnboarding();
+    // Tone selection
+    document.querySelectorAll('input[name="tone"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        this.settings.tone = e.target.value;
       });
+    });
 
-    document.getElementById("openTwitter").addEventListener("click", () => {
-      chrome.tabs.create({ url: "https://x.com" });
+    // Brand spaces selection
+    const brandSpacesSelect = document.getElementById('brandSpaces');
+    brandSpacesSelect.addEventListener('change', (e) => {
+      this.settings.selectedBrandId = e.target.value;
+    });
+
+    finishBtn.addEventListener('click', () => {
+      this.finishOnboarding();
+    });
+
+    // Success state
+    const getStartedBtn = document.getElementById('getStartedBtn');
+    getStartedBtn.addEventListener('click', () => {
+      chrome.tabs.create({ url: 'https://x.com' });
       window.close();
     });
   }
 
   async validateApiKey() {
-    const apiKey = document.getElementById("onboardingApiKey").value.trim();
-    const validateBtn = document.getElementById("validateApiKey");
-    const validationMsg = document.getElementById("apiKeyValidation");
+    const apiKey = document.getElementById('apiKey').value.trim();
+    const nextBtn = document.getElementById('nextBtn');
+    const errorMsg = document.getElementById('errorMessage');
 
     if (!apiKey) {
-      this.showValidationMessage("Please enter an API key", "error");
+      this.showError('Please enter an API key');
       return;
     }
 
     // Show loading state
-    validateBtn.disabled = true;
-    validateBtn.innerHTML = `
-      <svg class="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 12c0 1-1 1-1 1s-1 0-1-1 1-1 1-1 1 0 1 1"/>
-        <path d="M16 12c0 1-1 1-1 1s-1 0-1-1 1-1 1-1 1 0 1 1"/>
-        <path d="M11 12c0 1-1 1-1 1s-1 0-1-1 1-1 1-1 1 0 1 1"/>
-      </svg>
-      Validating...
-    `;
+    nextBtn.disabled = true;
+    nextBtn.textContent = 'Validating...';
 
     try {
-      // Test API key with a simple request
-      const response = await fetch("https://www.xthreads.app/api/ai-reply", {
-        method: "POST",
-        mode: "cors",
+      const response = await fetch('https://www.xthreads.app/api/validate-key', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          tweet: "Test tweet for API validation",
-          tone: "neutral",
-        }),
+          apiKey: apiKey
+        })
       });
 
       if (response.ok) {
-        this.settings.apiKey = apiKey;
-        this.showValidationMessage(
-          "API key validated successfully!",
-          "success"
-        );
-
-        // Wait a moment then proceed to next step
-        setTimeout(() => {
-          this.goToStep(2);
-        }, 1500);
+        const data = await response.json();
+        if (data.valid) {
+          this.validatedApiKey = apiKey;
+          this.settings.apiKey = apiKey;
+          this.showToast('Key Validated', 'success');
+          
+          // Wait a moment then proceed to step 2
+          setTimeout(() => {
+            this.goToStep(2);
+          }, 1000);
+        } else {
+          throw new Error('Invalid API key');
+        }
       } else {
         throw new Error(`API validation failed: ${response.status}`);
       }
     } catch (error) {
-      console.error("API key validation failed:", error);
-      this.showValidationMessage(
-        "Invalid API key. Please check and try again.",
-        "error"
-      );
-
+      console.error('API key validation failed:', error);
+      this.showError('Invalid Key');
+      this.showToast('Invalid Key', 'error');
+      
       // Reset button
-      validateBtn.disabled = false;
-      validateBtn.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9 12l2 2 4-4"/>
-          <circle cx="12" cy="12" r="10"/>
-        </svg>
-        Validate & Continue
-      `;
+      nextBtn.disabled = false;
+      nextBtn.textContent = 'Next';
     }
   }
 
-  showValidationMessage(message, type) {
-    const validationMsg = document.getElementById("apiKeyValidation");
-    validationMsg.textContent = message;
-    validationMsg.className = `validation-message ${type}`;
+  async loadBrandSpaces() {
+    const brandSpacesSelect = document.getElementById('brandSpaces');
+    
+    try {
+      const response = await fetch('https://www.xthreads.app/api/brandspaces', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.validatedApiKey
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        this.brandSpaces = data.brandSpaces || [];
+        
+        // Clear loading option
+        brandSpacesSelect.innerHTML = '';
+        
+        if (this.brandSpaces.length === 0) {
+          brandSpacesSelect.innerHTML = '<option value="">No brand spaces found</option>';
+        } else {
+          // Add default option
+          brandSpacesSelect.innerHTML = '<option value="">Select a brand space</option>';
+          
+          // Add brand spaces
+          this.brandSpaces.forEach(brand => {
+            const option = document.createElement('option');
+            option.value = brand.id;
+            option.textContent = brand.name;
+            brandSpacesSelect.appendChild(option);
+          });
+          
+          // Select first brand space by default
+          if (this.brandSpaces.length > 0) {
+            brandSpacesSelect.value = this.brandSpaces[0].id;
+            this.settings.selectedBrandId = this.brandSpaces[0].id;
+          }
+        }
+      } else {
+        throw new Error(`Failed to load brand spaces: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('Failed to load brand spaces:', error);
+      brandSpacesSelect.innerHTML = '<option value="">Failed to load brand spaces</option>';
+      this.showToast('Failed to load brand spaces', 'error');
+    }
   }
 
   goToStep(stepNumber) {
-    // Hide current step
-    document.querySelectorAll(".step").forEach((step) => {
-      step.classList.remove("active");
+    // Hide all step content
+    document.querySelectorAll('.step-content').forEach(content => {
+      content.style.display = 'none';
     });
-
+    
     // Show target step
-    document.getElementById(`step${stepNumber}`).classList.add("active");
-
+    const targetStep = document.getElementById(`step${stepNumber}`);
+    if (stepNumber === 'success') {
+      document.getElementById('success').style.display = 'block';
+    } else {
+      targetStep.style.display = 'block';
+    }
+    
     this.currentStep = stepNumber;
-    this.updateProgress();
-
+    this.updateStepIndicator();
+    
+    // Load brand spaces when entering step 2
+    if (stepNumber === 2) {
+      this.loadBrandSpaces();
+    }
+    
     // Scroll to top
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  updateProgress() {
-    const progressFill = document.getElementById("progressFill");
-    const progress = (this.currentStep / 4) * 100;
-    progressFill.style.width = `${progress}%`;
-  }
-
-  async finishOnboarding() {
-    try {
-      // Ensure we have keywords
-      const keywordsInput = document.getElementById("onboardingKeywords");
-      if (keywordsInput.value.trim()) {
-        this.settings.keywords = keywordsInput.value
-          .split(",")
-          .map((k) => k.trim())
-          .filter((k) => k.length > 0);
-      }
-
-      // Set default keywords if none provided
-      if (this.settings.keywords.length === 0) {
-        this.settings.keywords = [
-          "AI",
-          "tech",
-          "startup",
-          "coding",
-          "development",
-        ];
-      }
-
-      // Mark as onboarded
-      this.settings.isOnboarded = true;
-
-      // Save settings
-      await chrome.storage.local.set({
-        xthreads_settings: this.settings,
-      });
-
-      this.showToast("Setup completed successfully!", "success");
-
-      // Go to final step
-      this.goToStep(4);
-    } catch (error) {
-      console.error("Failed to complete onboarding:", error);
-      this.showToast("Failed to save settings. Please try again.", "error");
+  updateStepIndicator() {
+    const step1Indicator = document.getElementById('step1-indicator');
+    const step2Indicator = document.getElementById('step2-indicator');
+    
+    // Reset indicators
+    step1Indicator.classList.remove('active');
+    step2Indicator.classList.remove('active');
+    
+    // Set active indicator
+    if (this.currentStep === 1) {
+      step1Indicator.classList.add('active');
+    } else if (this.currentStep === 2) {
+      step1Indicator.classList.add('active'); // Step 1 completed
+      step2Indicator.classList.add('active');
     }
   }
 
-  showToast(message, type = "info") {
-    const container = document.getElementById("toastContainer");
-    const toast = document.createElement("div");
+  async finishOnboarding() {
+    const finishBtn = document.getElementById('finishBtn');
+    const brandSpacesSelect = document.getElementById('brandSpaces');
+    const keywordsInput = document.getElementById('keywords');
+
+    // Validate required fields
+    if (!brandSpacesSelect.value) {
+      this.showToast('Please select a brand space', 'error');
+      return;
+    }
+
+    // Get keywords
+    const keywordsValue = keywordsInput.value.trim();
+    if (keywordsValue) {
+      this.settings.keywords = keywordsValue
+        .split(',')
+        .map(k => k.trim())
+        .filter(k => k.length > 0);
+    }
+
+    // Set default keywords if none provided
+    if (this.settings.keywords.length === 0) {
+      this.settings.keywords = ['build in public', 'SaaS', 'marketing'];
+    }
+
+    // Update settings
+    this.settings.selectedBrandId = brandSpacesSelect.value;
+    this.settings.isOnboarded = true;
+
+    // Show loading state
+    finishBtn.disabled = true;
+    finishBtn.textContent = 'Finishing...';
+
+    try {
+      // Save settings to storage
+      await chrome.storage.local.set({
+        xthreads_settings: this.settings
+      });
+
+      this.showToast('Settings Saved!', 'success');
+      
+      // Wait a moment then show success
+      setTimeout(() => {
+        this.goToStep('success');
+      }, 1000);
+      
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+      this.showToast('Failed to save settings', 'error');
+      
+      // Reset button
+      finishBtn.disabled = false;
+      finishBtn.textContent = 'Finish Setup';
+    }
+  }
+
+  showError(message) {
+    const errorMsg = document.getElementById('errorMessage');
+    errorMsg.textContent = message;
+  }
+
+  showToast(message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = message;
 
     container.appendChild(toast);
 
     setTimeout(() => {
-      toast.remove();
+      if (toast.parentNode) {
+        toast.remove();
+      }
     }, 4000);
   }
 }
 
-// Add CSS for spinning animation
-const style = document.createElement("style");
-style.textContent = `
-  .animate-spin {
-    animation: spin 1s linear infinite;
-  }
-  
-  @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
-  }
-`;
-document.head.appendChild(style);
-
 // Initialize onboarding when DOM is loaded
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener('DOMContentLoaded', () => {
   new XThreadsOnboarding();
 });

@@ -6,9 +6,10 @@ class XThreadsPopup {
   constructor() {
     this.settings = {
       apiKey: '',
+      selectedBrandId: '',
       keywords: [],
       tone: 'neutral',
-      mode: 'manual',
+      isOnboarded: false,
       isActive: false
     };
     
@@ -18,7 +19,10 @@ class XThreadsPopup {
       totalAttempts: 0
     };
 
-    this.currentTab = 'rewrite';
+    this.brandSpaces = [];
+    this.currentTab = 'generate';
+    this.currentThread = [];
+    
     this.init();
   }
 
@@ -32,6 +36,7 @@ class XThreadsPopup {
     }
     
     this.bindEvents();
+    this.loadBrandSpaces();
     this.updateUI();
     this.updateStats();
   }
@@ -41,7 +46,7 @@ class XThreadsPopup {
     container.innerHTML = `
       <div class="onboarding-prompt" style="padding: 40px 20px; text-align: center;">
         <div class="logo" style="margin-bottom: 20px;">
-          <img src="assets/logo16.png" alt="xThreads" width="32" height="32" />
+          <img src="assets/icon16.png" alt="xThreads" width="32" height="32" />
           <h2 style="margin-top: 12px; color: #1f2937;">Welcome to xThreads Agent</h2>
         </div>
         <p style="color: #6b7280; margin-bottom: 24px;">Please complete the setup process to start using the extension.</p>
@@ -79,19 +84,69 @@ class XThreadsPopup {
   async saveSettings() {
     try {
       await chrome.storage.local.set({ 
-        xthreads_settings: this.settings,
-        xthreads_stats: this.stats
+        xthreads_settings: this.settings
       });
     } catch (error) {
       console.error('Failed to save settings:', error);
     }
   }
 
+  async loadBrandSpaces() {
+    if (!this.settings.apiKey) return;
+
+    try {
+      const response = await fetch('https://www.xthreads.app/api/brandspaces', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.settings.apiKey
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        this.brandSpaces = data.brandSpaces || [];
+        this.updateBrandSpaceSelectors();
+      } else {
+        console.error('Failed to load brand spaces:', response.status);
+      }
+    } catch (error) {
+      console.error('Failed to load brand spaces:', error);
+    }
+  }
+
+  updateBrandSpaceSelectors() {
+    const selectors = [
+      'generateBrand', 'rewriteBrand', 'threadBrand', 
+      'agentBrand', 'settingsBrandSpace'
+    ];
+
+    selectors.forEach(selectorId => {
+      const select = document.getElementById(selectorId);
+      if (select) {
+        select.innerHTML = '';
+        
+        if (this.brandSpaces.length === 0) {
+          select.innerHTML = '<option value="">No brand spaces found</option>';
+        } else {
+          select.innerHTML = '<option value="">Select brand space</option>';
+          this.brandSpaces.forEach(brand => {
+            const option = document.createElement('option');
+            option.value = brand.id;
+            option.textContent = brand.name;
+            option.selected = brand.id === this.settings.selectedBrandId;
+            select.appendChild(option);
+          });
+        }
+      }
+    });
+  }
+
   bindEvents() {
     // Tab navigation
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        this.switchTab(e.target.dataset.tab);
+        this.switchTab(e.target.closest('.tab-btn').dataset.tab);
       });
     });
 
@@ -104,17 +159,25 @@ class XThreadsPopup {
       this.closeSettings();
     });
 
-    // Rewrite tab
+    // Bind tab-specific events
+    this.bindGenerateEvents();
     this.bindRewriteEvents();
-    
-    // Thread tab
     this.bindThreadEvents();
-    
-    // Agent tab
     this.bindAgentEvents();
-
-    // Settings
     this.bindSettingsEvents();
+  }
+
+  bindGenerateEvents() {
+    const input = document.getElementById('generateInput');
+    const btn = document.getElementById('generateBtn');
+
+    input.addEventListener('input', (e) => {
+      btn.disabled = e.target.value.trim().length === 0;
+    });
+
+    btn.addEventListener('click', () => {
+      this.generateTweet();
+    });
   }
 
   bindRewriteEvents() {
@@ -135,7 +198,7 @@ class XThreadsPopup {
     });
 
     btn.addEventListener('click', () => {
-      this.generateRewrites();
+      this.rewriteContent();
     });
   }
 
@@ -162,12 +225,13 @@ class XThreadsPopup {
   bindAgentEvents() {
     const keywordsInput = document.getElementById('agentKeywords');
     const toneSelect = document.getElementById('agentTone');
-    const startBtn = document.getElementById('startAgentBtn');
-    const stopBtn = document.getElementById('stopAgentBtn');
+    const brandSelect = document.getElementById('agentBrand');
+    const agentToggle = document.getElementById('agentToggle');
 
     // Load current settings
     keywordsInput.value = this.settings.keywords.join(', ');
     toneSelect.value = this.settings.tone;
+    agentToggle.checked = this.settings.isActive;
 
     keywordsInput.addEventListener('input', (e) => {
       this.settings.keywords = e.target.value
@@ -182,31 +246,37 @@ class XThreadsPopup {
       this.saveSettings();
     });
 
-    startBtn.addEventListener('click', () => {
-      this.startAgent();
+    brandSelect.addEventListener('change', (e) => {
+      this.settings.selectedBrandId = e.target.value;
+      this.saveSettings();
     });
 
-    stopBtn.addEventListener('click', () => {
-      this.stopAgent();
+    agentToggle.addEventListener('change', (e) => {
+      this.toggleAgent(e.target.checked);
     });
   }
 
   bindSettingsEvents() {
     const apiKeyInput = document.getElementById('settingsApiKey');
-    const fetchBtn = document.getElementById('fetchApiKeyBtn');
+    const brandSpaceSelect = document.getElementById('settingsBrandSpace');
+    const keywordsInput = document.getElementById('settingsKeywords');
+    const updateBtn = document.getElementById('updateApiKeyBtn');
     const saveBtn = document.getElementById('saveSettingsBtn');
 
+    // Load current settings
     apiKeyInput.value = this.settings.apiKey;
+    keywordsInput.value = this.settings.keywords.join(', ');
 
-    fetchBtn.addEventListener('click', () => {
-      this.fetchApiKeyFromXThreads();
+    // Set tone radio buttons
+    const toneRadio = document.querySelector(`input[name="settingsTone"][value="${this.settings.tone}"]`);
+    if (toneRadio) toneRadio.checked = true;
+
+    updateBtn.addEventListener('click', () => {
+      this.updateApiKey();
     });
 
     saveBtn.addEventListener('click', () => {
-      this.settings.apiKey = apiKeyInput.value.trim();
-      this.saveSettings();
-      this.closeSettings();
-      this.showToast('Settings saved successfully!', 'success');
+      this.saveSettingsFromModal();
     });
   }
 
@@ -224,48 +294,36 @@ class XThreadsPopup {
     this.currentTab = tabName;
   }
 
-  async generateRewrites() {
-    const input = document.getElementById('rewriteInput');
-    const tone = document.getElementById('rewriteTone').value;
-    const language = document.getElementById('rewriteLanguage').value;
-    const btn = document.getElementById('rewriteBtn');
-    const results = document.getElementById('rewriteResults');
-    const variations = document.getElementById('rewriteVariations');
+  async generateTweet() {
+    const input = document.getElementById('generateInput');
+    const tone = document.getElementById('generateTone').value;
+    const brandId = document.getElementById('generateBrand').value;
+    const btn = document.getElementById('generateBtn');
+    const results = document.getElementById('generateResults');
 
     if (!input.value.trim()) {
-      this.showToast('Please enter a tweet to rewrite', 'error');
+      this.showToast('Please enter a prompt for the tweet', 'error');
       return;
     }
 
-    if (!this.settings.apiKey) {
-      this.showToast('Please configure your API key in settings', 'error');
+    if (!brandId) {
+      this.showToast('Please select a brand space', 'error');
       return;
     }
 
-    // Show loading state
-    btn.classList.add('loading');
-    btn.disabled = true;
-    btn.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 12c0 1-1 1-1 1s-1 0-1-1 1-1 1-1 1 0 1 1"/>
-        <path d="M16 12c0 1-1 1-1 1s-1 0-1-1 1-1 1-1 1 0 1 1"/>
-        <path d="M11 12c0 1-1 1-1 1s-1 0-1-1 1-1 1-1 1 0 1 1"/>
-      </svg>
-      Generating...
-    `;
+    this.showLoading(btn, 'Generating...');
 
     try {
-      const response = await fetch('https://www.xthreads.app/api/rewrite', {
+      const response = await fetch('https://www.xthreads.app/api/generate-tweet', {
         method: 'POST',
-        mode: 'cors',
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': this.settings.apiKey
         },
         body: JSON.stringify({
-          post: input.value.trim(),
-          tone: tone,
-          language: language
+          prompt: input.value.trim(),
+          brandId: brandId,
+          tone: tone
         })
       });
 
@@ -274,32 +332,193 @@ class XThreadsPopup {
       }
 
       const data = await response.json();
+      const tweet = this.validateAndTruncateContent(data.tweet);
       
-      if (data.variations && data.variations.length > 0) {
-        this.displayRewrites(data.variations);
-        results.style.display = 'block';
-      } else {
-        throw new Error('No variations generated');
-      }
+      this.displayGeneratedContent([tweet], 'generateVariations');
+      results.style.display = 'block';
+      
     } catch (error) {
-      console.error('Failed to generate rewrites:', error);
-      this.showToast('Failed to generate rewrites. Please try again.', 'error');
+      console.error('Failed to generate tweet:', error);
+      this.showToast('Failed to generate tweet. Please try again.', 'error');
     } finally {
-      // Reset button
-      btn.classList.remove('loading');
-      btn.disabled = false;
-      btn.innerHTML = `
+      this.resetButton(btn, 'Generate Tweet', `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="5,3 19,12 5,21"/>
+        </svg>
+        Generate Tweet
+      `);
+    }
+  }
+
+  async rewriteContent() {
+    const input = document.getElementById('rewriteInput');
+    const tone = document.getElementById('rewriteTone').value;
+    const brandId = document.getElementById('rewriteBrand').value;
+    const btn = document.getElementById('rewriteBtn');
+    const results = document.getElementById('rewriteResults');
+
+    if (!input.value.trim()) {
+      this.showToast('Please enter content to rewrite', 'error');
+      return;
+    }
+
+    if (!brandId) {
+      this.showToast('Please select a brand space', 'error');
+      return;
+    }
+
+    this.showLoading(btn, 'Rewriting...');
+
+    try {
+      const response = await fetch('https://www.xthreads.app/api/rewrite-content', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.settings.apiKey
+        },
+        body: JSON.stringify({
+          originalContent: input.value.trim(),
+          brandId: brandId,
+          tone: tone
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const variations = data.variations || [data.rewrittenContent];
+      const validatedVariations = variations.map(v => this.validateAndTruncateContent(v));
+      
+      this.displayGeneratedContent(validatedVariations, 'rewriteVariations');
+      results.style.display = 'block';
+      
+    } catch (error) {
+      console.error('Failed to rewrite content:', error);
+      this.showToast('Failed to rewrite content. Please try again.', 'error');
+    } finally {
+      this.resetButton(btn, 'Rewrite', `
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
           <circle cx="12" cy="12" r="3"/>
         </svg>
-        Generate Rewrites
-      `;
+        Rewrite
+      `);
     }
   }
 
-  displayRewrites(variations) {
-    const container = document.getElementById('rewriteVariations');
+  async generateThread() {
+    const input = document.getElementById('threadInput');
+    const tone = document.getElementById('threadTone').value;
+    const brandId = document.getElementById('threadBrand').value;
+    const btn = document.getElementById('threadBtn');
+    const results = document.getElementById('threadResults');
+
+    if (!input.value.trim()) {
+      this.showToast('Please enter content for the thread', 'error');
+      return;
+    }
+
+    if (!brandId) {
+      this.showToast('Please select a brand space', 'error');
+      return;
+    }
+
+    this.showLoading(btn, 'Generating...');
+
+    try {
+      const response = await fetch('https://www.xthreads.app/api/generate-thread', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.settings.apiKey
+        },
+        body: JSON.stringify({
+          prompt: input.value.trim(),
+          brandId: brandId,
+          tone: tone
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const thread = data.thread || [];
+      const validatedThread = thread.map(tweet => this.validateAndTruncateContent(tweet));
+      
+      this.currentThread = validatedThread;
+      this.displayThread(validatedThread);
+      results.style.display = 'block';
+      
+    } catch (error) {
+      console.error('Failed to generate thread:', error);
+      this.showToast('Failed to generate thread. Please try again.', 'error');
+    } finally {
+      this.resetButton(btn, 'Generate Thread', `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14,2 14,8 20,8"/>
+        </svg>
+        Generate Thread
+      `);
+    }
+  }
+
+  async toggleAgent(isActive) {
+    this.settings.isActive = isActive;
+    await this.saveSettings();
+
+    try {
+      // Get current X.com tabs
+      const tabs = await chrome.tabs.query({ 
+        url: ['https://x.com/*', 'https://twitter.com/*'] 
+      });
+
+      const message = {
+        action: isActive ? 'startAgent' : 'stopAgent',
+        settings: this.settings
+      };
+
+      // Send message to all X.com tabs
+      for (const tab of tabs) {
+        try {
+          await chrome.tabs.sendMessage(tab.id, message);
+        } catch (error) {
+          console.log('Could not send message to tab:', tab.id);
+        }
+      }
+
+      this.updateAgentUI();
+      this.showToast(isActive ? 'Agent activated' : 'Agent deactivated', 'success');
+
+    } catch (error) {
+      console.error('Failed to toggle agent:', error);
+      this.showToast('Failed to toggle agent', 'error');
+      
+      // Revert toggle state
+      document.getElementById('agentToggle').checked = !isActive;
+      this.settings.isActive = !isActive;
+    }
+  }
+
+  validateAndTruncateContent(content) {
+    if (!content) return '';
+    
+    let cleaned = content.trim();
+    
+    if (cleaned.length > 280) {
+      cleaned = cleaned.substring(0, 277) + '...';
+      this.showToast('Content truncated to 280 characters', 'info');
+    }
+    
+    return cleaned;
+  }
+
+  displayGeneratedContent(variations, containerId) {
+    const container = document.getElementById(containerId);
     container.innerHTML = '';
 
     variations.forEach((variation, index) => {
@@ -308,7 +527,7 @@ class XThreadsPopup {
       item.innerHTML = `
         <div class="result-text">${variation}</div>
         <div class="result-actions">
-          <button class="use-btn" data-text="${variation.replace(/"/g, '&quot;')}">Use this</button>
+          <button class="use-btn" data-text="${this.escapeHtml(variation)}">Use this</button>
         </div>
       `;
       container.appendChild(item);
@@ -317,116 +536,9 @@ class XThreadsPopup {
     // Bind use buttons
     container.querySelectorAll('.use-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        this.useRewrite(e.target.dataset.text);
+        this.useContent(e.target.dataset.text);
       });
     });
-  }
-
-  async useRewrite(text) {
-    try {
-      // Get active X.com tab or create one
-      const tabs = await chrome.tabs.query({ 
-        url: ['https://x.com/*', 'https://twitter.com/*'] 
-      });
-
-      let targetTab;
-      if (tabs.length > 0) {
-        targetTab = tabs[0];
-        await chrome.tabs.update(targetTab.id, { active: true });
-      } else {
-        targetTab = await chrome.tabs.create({ url: 'https://x.com/compose/tweet' });
-        // Wait for tab to load
-        await new Promise(resolve => setTimeout(resolve, 3000));
-      }
-
-      // Send message to content script to type the text
-      await chrome.tabs.sendMessage(targetTab.id, {
-        action: 'typeInComposer',
-        text: text
-      });
-
-      this.showToast('Text posted successfully!', 'success');
-      window.close();
-
-    } catch (error) {
-      console.error('Failed to use rewrite:', error);
-      this.showToast('Failed to post text. Please try again.', 'error');
-    }
-  }
-
-  async generateThread() {
-    const input = document.getElementById('threadInput');
-    const tone = document.getElementById('threadTone').value;
-    const language = document.getElementById('threadLanguage').value;
-    const btn = document.getElementById('threadBtn');
-    const results = document.getElementById('threadResults');
-    const preview = document.getElementById('threadPreview');
-
-    if (!input.value.trim()) {
-      this.showToast('Please enter content for the thread', 'error');
-      return;
-    }
-
-    if (!this.settings.apiKey) {
-      this.showToast('Please configure your API key in settings', 'error');
-      return;
-    }
-
-    // Show loading state
-    btn.classList.add('loading');
-    btn.disabled = true;
-    btn.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 12c0 1-1 1-1 1s-1 0-1-1 1-1 1-1 1 0 1 1"/>
-        <path d="M16 12c0 1-1 1-1 1s-1 0-1-1 1-1 1-1 1 0 1 1"/>
-        <path d="M11 12c0 1-1 1-1 1s-1 0-1-1 1-1 1-1 1 0 1 1"/>
-      </svg>
-      Generating...
-    `;
-
-    try {
-      const response = await fetch('https://www.xthreads.app/api/thread', {
-        method: 'POST',
-        mode: 'cors',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': this.settings.apiKey
-        },
-        body: JSON.stringify({
-          content: input.value.trim(),
-          tone: tone,
-          language: language
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      if (data.thread && data.thread.length > 0) {
-        this.displayThread(data.thread);
-        results.style.display = 'block';
-        this.currentThread = data.thread;
-      } else {
-        throw new Error('No thread generated');
-      }
-    } catch (error) {
-      console.error('Failed to generate thread:', error);
-      this.showToast('Failed to generate thread. Please try again.', 'error');
-    } finally {
-      // Reset button
-      btn.classList.remove('loading');
-      btn.disabled = false;
-      btn.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14,2 14,8 20,8"/>
-        </svg>
-        Generate Thread
-      `;
-    }
   }
 
   displayThread(thread) {
@@ -442,6 +554,37 @@ class XThreadsPopup {
       `;
       container.appendChild(item);
     });
+  }
+
+  async useContent(text) {
+    try {
+      // Get active X.com tab or create one
+      const tabs = await chrome.tabs.query({ 
+        url: ['https://x.com/*', 'https://twitter.com/*'] 
+      });
+
+      let targetTab;
+      if (tabs.length > 0) {
+        targetTab = tabs[0];
+        await chrome.tabs.update(targetTab.id, { active: true });
+      } else {
+        targetTab = await chrome.tabs.create({ url: 'https://x.com/compose/tweet' });
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+
+      // Send message to content script to type the text
+      await chrome.tabs.sendMessage(targetTab.id, {
+        action: 'typeInComposer',
+        text: text
+      });
+
+      this.showToast('Content ready to post!', 'success');
+      window.close();
+
+    } catch (error) {
+      console.error('Failed to use content:', error);
+      this.showToast('Failed to insert content. Please try again.', 'error');
+    }
   }
 
   async postThread() {
@@ -462,7 +605,6 @@ class XThreadsPopup {
         await chrome.tabs.update(targetTab.id, { active: true });
       } else {
         targetTab = await chrome.tabs.create({ url: 'https://x.com/compose/tweet' });
-        // Wait for tab to load
         await new Promise(resolve => setTimeout(resolve, 3000));
       }
 
@@ -472,7 +614,7 @@ class XThreadsPopup {
         thread: this.currentThread
       });
 
-      this.showToast('Thread posted successfully!', 'success');
+      this.showToast('Thread ready to post!', 'success');
       window.close();
 
     } catch (error) {
@@ -481,70 +623,66 @@ class XThreadsPopup {
     }
   }
 
-  async startAgent() {
-    if (!this.settings.apiKey || this.settings.keywords.length === 0) {
-      this.showToast('Please configure API key and keywords first', 'error');
+  async updateApiKey() {
+    const apiKeyInput = document.getElementById('settingsApiKey');
+    const newApiKey = apiKeyInput.value.trim();
+
+    if (!newApiKey) {
+      this.showToast('Please enter an API key', 'error');
       return;
     }
 
     try {
-      // Get active X.com tab
-      const tabs = await chrome.tabs.query({ 
-        active: true, 
-        url: ['https://x.com/*', 'https://twitter.com/*'] 
+      // Validate the API key
+      const response = await fetch('https://www.xthreads.app/api/validate-key', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          apiKey: newApiKey
+        })
       });
 
-      if (tabs.length === 0) {
-        this.showToast('Please open X.com in the active tab', 'error');
-        return;
+      if (response.ok) {
+        const data = await response.json();
+        if (data.valid) {
+          this.settings.apiKey = newApiKey;
+          await this.saveSettings();
+          await this.loadBrandSpaces();
+          this.showToast('API key updated successfully!', 'success');
+        } else {
+          throw new Error('Invalid API key');
+        }
+      } else {
+        throw new Error('API validation failed');
       }
-
-      this.settings.isActive = true;
-      await this.saveSettings();
-
-      // Send message to content script
-      await chrome.tabs.sendMessage(tabs[0].id, {
-        action: 'startAgent',
-        settings: this.settings
-      });
-
-      this.updateAgentUI();
-      this.showToast('Agent started successfully', 'success');
-
     } catch (error) {
-      console.error('Failed to start agent:', error);
-      this.showToast('Failed to start agent. Please refresh X.com.', 'error');
-      this.settings.isActive = false;
-      this.saveSettings();
-      this.updateAgentUI();
+      console.error('Failed to update API key:', error);
+      this.showToast('Invalid API key', 'error');
     }
   }
 
-  async stopAgent() {
-    try {
-      const tabs = await chrome.tabs.query({ 
-        url: ['https://x.com/*', 'https://twitter.com/*'] 
-      });
+  async saveSettingsFromModal() {
+    const brandSpaceSelect = document.getElementById('settingsBrandSpace');
+    const keywordsInput = document.getElementById('settingsKeywords');
+    const toneRadio = document.querySelector('input[name="settingsTone"]:checked');
 
-      this.settings.isActive = false;
-      await this.saveSettings();
-
-      // Send stop message to all X.com tabs
-      for (const tab of tabs) {
-        try {
-          await chrome.tabs.sendMessage(tab.id, { action: 'stopAgent' });
-        } catch (error) {
-          console.log('Could not send stop message to tab:', tab.id);
-        }
-      }
-
-      this.updateAgentUI();
-      this.showToast('Agent stopped', 'info');
-
-    } catch (error) {
-      console.error('Failed to stop agent:', error);
-      this.showToast('Agent stopped (with errors)', 'error');
+    // Update settings
+    this.settings.selectedBrandId = brandSpaceSelect.value;
+    this.settings.keywords = keywordsInput.value
+      .split(',')
+      .map(k => k.trim())
+      .filter(k => k.length > 0);
+    
+    if (toneRadio) {
+      this.settings.tone = toneRadio.value;
     }
+
+    await this.saveSettings();
+    this.updateBrandSpaceSelectors();
+    this.closeSettings();
+    this.showToast('Settings saved!', 'success');
   }
 
   updateUI() {
@@ -552,27 +690,21 @@ class XThreadsPopup {
   }
 
   updateAgentUI() {
-    const statusDot = document.querySelector('.status-dot');
+    const statusDot = document.getElementById('statusDot');
     const statusText = document.getElementById('statusText');
-    const statusDotLarge = document.querySelector('.status-dot-large');
+    const agentStatusDot = document.getElementById('agentStatusDot');
     const agentStatusText = document.getElementById('agentStatusText');
-    const startBtn = document.getElementById('startAgentBtn');
-    const stopBtn = document.getElementById('stopAgentBtn');
 
     if (this.settings.isActive) {
       statusDot?.classList.add('active');
-      statusDotLarge?.classList.add('active');
+      agentStatusDot?.classList.add('active');
       if (statusText) statusText.textContent = 'Active';
       if (agentStatusText) agentStatusText.textContent = 'Active';
-      if (startBtn) startBtn.style.display = 'none';
-      if (stopBtn) stopBtn.style.display = 'flex';
     } else {
       statusDot?.classList.remove('active');
-      statusDotLarge?.classList.remove('active');
+      agentStatusDot?.classList.remove('active');
       if (statusText) statusText.textContent = 'Inactive';
       if (agentStatusText) agentStatusText.textContent = 'Inactive';
-      if (startBtn) startBtn.style.display = 'flex';
-      if (stopBtn) stopBtn.style.display = 'none';
     }
   }
 
@@ -592,53 +724,35 @@ class XThreadsPopup {
 
   openSettings() {
     document.getElementById('settingsModal').style.display = 'flex';
-    document.getElementById('settingsApiKey').value = this.settings.apiKey;
   }
 
   closeSettings() {
     document.getElementById('settingsModal').style.display = 'none';
   }
 
-  async fetchApiKeyFromXThreads() {
-    try {
-      this.showToast('Checking xthreads.app for API key...', 'info');
-      
-      const tabs = await chrome.tabs.query({ url: 'https://xthreads.app/*' });
-      
-      if (tabs.length === 0) {
-        this.showToast('Please open xthreads.app in a tab first', 'error');
-        return;
-      }
+  showLoading(button, text) {
+    button.disabled = true;
+    button.classList.add('loading');
+    button.textContent = text;
+  }
 
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tabs[0].id },
-        func: () => {
-          const apiKeyElement = document.querySelector('[data-api-key]') || 
-                               document.querySelector('.api-key') ||
-                               document.querySelector('#api-key');
-          
-          if (apiKeyElement) {
-            return apiKeyElement.textContent || apiKeyElement.value || apiKeyElement.dataset.apiKey;
-          }
-          
-          const storedKey = localStorage.getItem('xthreads_api_key') || 
-                           localStorage.getItem('apiKey') ||
-                           localStorage.getItem('api_key');
-          
-          return storedKey;
-        }
-      });
-
-      if (results[0]?.result) {
-        document.getElementById('settingsApiKey').value = results[0].result;
-        this.showToast('API key fetched successfully!', 'success');
-      } else {
-        this.showToast('No API key found. Please copy it manually.', 'error');
-      }
-    } catch (error) {
-      console.error('Failed to fetch API key:', error);
-      this.showToast('Failed to fetch API key. Please enter manually.', 'error');
+  resetButton(button, text, html) {
+    button.disabled = false;
+    button.classList.remove('loading');
+    if (html) {
+      button.innerHTML = html;
+    } else {
+      button.textContent = text;
     }
+  }
+
+  escapeHtml(text) {
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 
   showToast(message, type = 'info') {
@@ -646,11 +760,13 @@ class XThreadsPopup {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = message;
-    
+
     container.appendChild(toast);
-    
+
     setTimeout(() => {
-      toast.remove();
+      if (toast.parentNode) {
+        toast.remove();
+      }
     }, 4000);
   }
 }
@@ -663,12 +779,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'updateStats') {
-    const popup = window.xthreadsPopup;
-    if (popup) {
-      popup.stats = { ...popup.stats, ...message.stats };
-      popup.saveSettings();
-      popup.updateStats();
-    }
+    // Handle stats updates if needed
   }
 });
 

@@ -6,7 +6,7 @@
   justify-content: center;
   padding: 6px;
   background: #ffffff;
-  color: #008080;
+  color: #00BCD4;
   border: 1px solid #e1e8ed;
   border-radius: 50%;
   font-size: 12px;
@@ -22,10 +22,10 @@
 
 .xthreads-overlay-btn:hover {
   opacity: 1;
-  background: #f0fdfa;
-  border-color: #008080;
+  background: rgba(0, 188, 212, 0.05);
+  border-color: #00BCD4;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 128, 128, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 188, 212, 0.2);
 }
 
 .xthreads-overlay-btn img {
@@ -70,7 +70,7 @@
 
 .context-menu-item:hover {
   background: #f9fafb;
-  color: #008080;
+  color: #00BCD4;
 }
 
 .context-menu-item svg {
@@ -79,7 +79,7 @@
 }
 
 .context-menu-item:hover svg {
-  color: #008080;
+  color: #00BCD4;
 }
 
 /* Toast Notifications */
@@ -114,8 +114,8 @@
 }
 
 .xthreads-toast-info {
-  border-left: 4px solid #008080;
-  background: #f0fdfa;
+  border-left: 4px solid #00BCD4;
+  background: rgba(0, 188, 212, 0.05);
   color: #134e4a;
 }
 
@@ -171,4 +171,481 @@
 
 .loading svg {
   animation: spin 1s linear infinite;
+}
+
+/* In-Composer AI Button */
+.xthreads-composer-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #ffffff;
+  color: #00BCD4;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-right: 8px;
+}
+
+.xthreads-composer-button:hover {
+  background: rgba(0, 188, 212, 0.05);
+  border-color: #00BCD4;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 188, 212, 0.2);
+}
+
+.xthreads-composer-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Modal Styles */
+.xthreads-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.xthreads-modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.xthreads-modal-content {
+  background: #ffffff;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.xthreads-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.xthreads-modal-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0;
+}
+
+.xthreads-modal-close {
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.xthreads-modal-close:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.xthreads-modal-body {
+  padding: 20px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.xthreads-option-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.xthreads-option-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  background: #ffffff;
+  color: #6b7280;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 80px;
+}
+
+.xthreads-option-btn:hover:not(:disabled) {
+  border-color: #00BCD4;
+  color: #00BCD4;
+  background: rgba(0, 188, 212, 0.05);
+}
+
+.xthreads-option-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.xthreads-option-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.xthreads-content-form {
+  margin-top: 20px;
+}
+
+.xthreads-input-group {
+  margin-bottom: 16px;
+}
+
+.xthreads-input-group label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: #374151;
+  font-size: 13px;
+}
+
+.xthreads-prompt-input,
+.xthreads-tone-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1f2937;
+  font-size: 13px;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.xthreads-prompt-input:focus,
+.xthreads-tone-select:focus {
+  outline: none;
+  border-color: #00BCD4;
+  box-shadow: 0 0 0 3px rgba(0, 188, 212, 0.1);
+}
+
+.xthreads-prompt-input {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.xthreads-form-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.xthreads-modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.xthreads-btn-primary,
+.xthreads-btn-secondary {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.xthreads-btn-primary {
+  background: #00BCD4;
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 188, 212, 0.2);
+}
+
+.xthreads-btn-primary:hover:not(:disabled) {
+  background: #00ACC1;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 188, 212, 0.3);
+}
+
+.xthreads-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.xthreads-btn-secondary {
+  background: #ffffff;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+}
+
+.xthreads-btn-secondary:hover {
+  background: #f9fafb;
+  color: #374151;
+  border-color: #9ca3af;
+}
+
+.xthreads-results {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.xthreads-results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.xthreads-results-header h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0;
+}
+
+.xthreads-stop-typing {
+  display: flex;
+  align-items: center;
+}
+
+.xthreads-stop-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.xthreads-stop-btn:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+}
+
+.xthreads-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.xthreads-result-item {
+  background: #f9fafb;
+  border: 1px solid #f3f4f6;
+  border-radius: 8px;
+  padding: 12px;
+  transition: all 0.2s ease;
+}
+
+.xthreads-result-item:hover {
+  border-color: #e5e7eb;
+}
+
+.xthreads-result-text {
+  font-size: 13px;
+  line-height: 1.4;
+  margin-bottom: 8px;
+  color: #1f2937;
+}
+
+.xthreads-result-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.xthreads-use-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background: #00BCD4;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.xthreads-use-btn:hover {
+  background: #00ACC1;
+  transform: translateY(-1px);
+}
+
+/* Agentic Reply Notification */
+.xthreads-agentic-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  max-width: 400px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  animation: slideInToast 0.3s ease;
+}
+
+.xthreads-notification-content {
+  padding: 16px;
+}
+
+.xthreads-notification-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.xthreads-notification-header h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0;
+}
+
+.xthreads-notification-close {
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.xthreads-notification-close:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.xthreads-notification-body {
+  margin-bottom: 16px;
+}
+
+.xthreads-original-tweet,
+.xthreads-suggested-reply {
+  margin-bottom: 12px;
+}
+
+.xthreads-original-tweet strong,
+.xthreads-suggested-reply strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.xthreads-original-tweet p,
+.xthreads-suggested-reply p {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #1f2937;
+  margin: 0;
+  padding: 8px;
+  background: #f9fafb;
+  border-radius: 6px;
+  border-left: 3px solid #00BCD4;
+}
+
+.xthreads-notification-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.xthreads-dismiss-btn,
+.xthreads-review-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.xthreads-dismiss-btn {
+  background: #ffffff;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+}
+
+.xthreads-dismiss-btn:hover {
+  background: #f9fafb;
+  color: #374151;
+  border-color: #9ca3af;
+}
+
+.xthreads-review-btn {
+  background: #00BCD4;
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 188, 212, 0.2);
+}
+
+.xthreads-review-btn:hover {
+  background: #00ACC1;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 188, 212, 0.3);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .xthreads-modal-content {
+    width: 95%;
+    max-height: 90vh;
+  }
+  
+  .xthreads-option-buttons {
+    grid-template-columns: 1fr;
+  }
+  
+  .xthreads-agentic-notification {
+    right: 10px;
+    left: 10px;
+    max-width: none;
+  }
 }
