@@ -329,7 +329,6 @@ class XThreadsBackground {
         },
         body: JSON.stringify({
           parentTweetContent: tweetData.content,
-          prompt: `Reply to this tweet based on keywords: ${settings.keywords.join(', ')}`,
           brandId: settings.selectedBrandId,
           tone: settings.tone
         })
