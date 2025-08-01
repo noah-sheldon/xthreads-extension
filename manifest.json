@@ -1,10 +1,21 @@
 {
   "manifest_version": 3,
-  "name": "xThreads Extension",
+  "name": "xThreads Agent",
   "version": "1.0.0",
   "description": "AI-powered content creation and agentic replies for X.com via xthreads.app",
-  "permissions": ["activeTab", "scripting", "storage", "tabs", "declarativeContent"],
-  "host_permissions": ["https://www.xthreads.app/*", "https://xthreads.app/*"],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs",
+    "declarativeContent"
+  ],
+  "host_permissions": [
+    "https://www.xthreads.app/*",
+    "https://xthreads.app/*",
+    "https://x.com/*",
+    "https://twitter.com/*"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "xThreads Agent"
