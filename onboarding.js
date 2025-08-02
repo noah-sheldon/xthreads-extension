@@ -7,7 +7,7 @@ class XThreadsOnboarding {
       apiKey: "",
       selectedBrandId: "",
       keywords: [],
-      tone: "neutral",
+      tone: "professional",
       isOnboarded: false,
     };
 
@@ -173,19 +173,19 @@ class XThreadsOnboarding {
 
           this.brandSpaces.forEach((brand) => {
             const option = document.createElement("option");
-            option.value = brand.id;
+            option.value = brand._id;
             option.textContent = brand.name;
             brandSpacesSelect.appendChild(option);
           });
 
           if (
             this.settings.selectedBrandId &&
-            this.brandSpaces.some((b) => b.id === this.settings.selectedBrandId)
+            this.brandSpaces.some((b) => b._id === this.settings.selectedBrandId)
           ) {
             brandSpacesSelect.value = this.settings.selectedBrandId;
           } else if (this.brandSpaces.length > 0) {
-            brandSpacesSelect.value = this.brandSpaces[0].id;
-            this.settings.selectedBrandId = this.brandSpaces[0].id;
+            brandSpacesSelect.value = this.brandSpaces[0]._id;
+            this.settings.selectedBrandId = this.brandSpaces[0]._id;
           } else {
             this.settings.selectedBrandId = "";
           }

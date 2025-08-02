@@ -31,6 +31,16 @@ class XThreadsBackground {
       }
     });
 
+    // Handle notification clicks
+    chrome.notifications.onClicked.addListener((notificationId) => {
+      this.handleNotificationClick(notificationId);
+    });
+
+    // Handle action (extension icon) clicks
+    chrome.action.onClicked.addListener(() => {
+      this.handleActionClick();
+    });
+
     // Clean up old data periodically
     this.setupCleanupSchedule();
     
@@ -140,6 +150,16 @@ class XThreadsBackground {
           sendResponse({ success: true });
           break;
 
+        case "showBatchNotification":
+          await this.showBatchNotification(message.count, message.opportunities);
+          sendResponse({ success: true });
+          break;
+
+        case "openPopupToReplyTab":
+          await this.handleOpenPopupToReplyTab(message.tweetData);
+          sendResponse({ success: true });
+          break;
+
         default:
           sendResponse({ success: false, error: "Unknown action" });
       }
@@ -219,22 +239,50 @@ class XThreadsBackground {
     // Stop existing monitoring
     this.stopAgenticMonitoring();
 
-    if (!settings.apiKey || settings.keywords.length === 0) {
-      console.log("Cannot start agentic monitoring: missing API key or keywords");
+    if (!settings.apiKey) {
+      console.log("Cannot start agentic monitoring: missing API key");
       return;
     }
 
-    console.log("Starting agentic monitoring with keywords:", settings.keywords);
+    console.log("Starting persistent agentic monitoring");
+
+    // Send start command to all X.com tabs
+    await this.sendToAllXTabs('startAgent', settings);
 
     // Start periodic monitoring
     this.scheduleNextAgenticCheck(settings);
   }
 
-  stopAgenticMonitoring() {
+  async stopAgenticMonitoring() {
     if (this.agenticInterval) {
       clearTimeout(this.agenticInterval);
       this.agenticInterval = null;
       console.log("Agentic monitoring stopped");
+    }
+
+    // Send stop command to all X.com tabs
+    await this.sendToAllXTabs('stopAgent');
+  }
+
+  async sendToAllXTabs(action, settings = null) {
+    try {
+      const tabs = await chrome.tabs.query({
+        url: ['https://x.com/*', 'https://twitter.com/*']
+      });
+
+      for (const tab of tabs) {
+        try {
+          await chrome.tabs.sendMessage(tab.id, {
+            action: action,
+            settings: settings
+          });
+        } catch (error) {
+          // Tab might not have content script loaded, ignore
+          console.log(`Could not send ${action} to tab ${tab.id}`);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to send message to X.com tabs:', error);
     }
   }
 
@@ -270,10 +318,12 @@ class XThreadsBackground {
       // Use the first X.com tab found
       const targetTab = tabs[0];
 
-      // Construct search query from keywords
-      const searchQuery = settings.keywords
+      // Construct search query from keywords with language and engagement filters
+      const keywordQuery = settings.keywords
         .map(keyword => `"${keyword}"`)
         .join(' OR ');
+      
+      const searchQuery = `(${keywordQuery}) min_faves:10 lang:en`;
 
       const searchUrl = `https://x.com/search?q=${encodeURIComponent(searchQuery)}&src=typed_query&f=live`;
 
@@ -384,6 +434,120 @@ class XThreadsBackground {
       });
     } catch (error) {
       console.error("Failed to mark tweet as replied:", error);
+    }
+  }
+
+  async showBatchNotification(count, opportunities) {
+    try {
+      // Update badge
+      await chrome.action.setBadgeText({ text: count.toString() });
+      await chrome.action.setBadgeBackgroundColor({ color: '#00bcd4' });
+      
+      // Show browser notification
+      const notificationId = await chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'assets/icon48.png',
+        title: 'xThreads - Reply Opportunities',
+        message: `Found ${count} new reply opportunities. Click to review.`,
+        priority: 1,
+        requireInteraction: true
+      });
+      
+      // Store notification data
+      await chrome.storage.local.set({
+        xthreads_last_notification: {
+          id: notificationId,
+          count: count,
+          timestamp: Date.now(),
+          opportunities: opportunities
+        }
+      });
+      
+      console.log(`Sent batch notification for ${count} opportunities`);
+      
+    } catch (error) {
+      console.error('Failed to show batch notification:', error);
+    }
+  }
+
+  async handleOpenPopupToReplyTab(tweetData) {
+    try {
+      // Store tweet data and open popup
+      await chrome.storage.local.set({
+        xthreads_current_tweet: {
+          ...tweetData,
+          timestamp: Date.now()
+        }
+      });
+      
+      // Try to open popup - this may fail in Manifest V3 due to user gesture requirements
+      try {
+        await chrome.action.openPopup();
+        console.log('Successfully opened popup');
+      } catch (error) {
+        console.log('Could not open popup programmatically:', error.message);
+        // Show a browser notification as fallback
+        await this.showOpenPopupNotification();
+      }
+      
+    } catch (error) {
+      console.error('Failed to open popup to reply tab:', error);
+    }
+  }
+
+  async showOpenPopupNotification() {
+    try {
+      await chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'assets/icon48.png',
+        title: 'xThreads - Reply Ready',
+        message: 'Click the xThreads extension icon to generate your reply',
+        priority: 1,
+        requireInteraction: true
+      });
+    } catch (error) {
+      console.error('Failed to show notification:', error);
+    }
+  }
+
+  async clearBatchBadge() {
+    try {
+      await chrome.action.setBadgeText({ text: '' });
+      await chrome.storage.local.remove('xthreads_last_notification');
+    } catch (error) {
+      console.error('Failed to clear batch badge:', error);
+    }
+  }
+
+  async handleNotificationClick(notificationId) {
+    try {
+      // Check if this is our batch notification
+      const result = await chrome.storage.local.get('xthreads_last_notification');
+      const lastNotification = result.xthreads_last_notification;
+      
+      if (lastNotification && lastNotification.id === notificationId) {
+        // Open popup to reply tab
+        chrome.action.openPopup();
+        
+        // Clear the notification
+        chrome.notifications.clear(notificationId);
+        await this.clearBatchBadge();
+        
+        console.log('Batch notification clicked - opening popup');
+      }
+    } catch (error) {
+      console.error('Failed to handle notification click:', error);
+    }
+  }
+
+  async handleActionClick() {
+    // This is called when user clicks the extension icon in toolbar
+    // Don't automatically clear the badge - let the popup handle it
+    try {
+      // Popup will automatically open (handled by default popup behavior)
+      // The popup will decide whether to clear the badge based on user interaction
+    } catch (error) {
+      console.error('Failed to handle action click:', error);
     }
   }
 

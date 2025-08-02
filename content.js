@@ -1,9 +1,31 @@
 // Guard against multiple injections
 if (!window.__xthreads_injected__) {
   window.__xthreads_injected__ = true;
+  
+  // Inject CSS for xThreads tweet buttons
+  const style = document.createElement('style');
+  style.textContent = `
+    .xthreads-tweet-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .xthreads-tweet-button [role="button"]:hover {
+      background-color: rgba(0, 188, 212, 0.1) !important;
+    }
+    
+    .xthreads-tweet-button img {
+      filter: brightness(0) saturate(100%) invert(39%) sepia(21%) saturate(200%) hue-rotate(180deg) brightness(96%) contrast(97%);
+      transition: all 0.2s ease;
+    }
+    
+    .xthreads-tweet-button [role="button"]:hover img {
+      filter: brightness(0) saturate(100%) invert(71%) sepia(89%) saturate(1481%) hue-rotate(166deg) brightness(91%) contrast(101%);
+    }
+  `;
+  document.head.appendChild(style);
 
-  // Global stop typing state
-  let globalStopTyping = false;
 
   class XThreadsContentScript {
     constructor() {
@@ -11,6 +33,10 @@ if (!window.__xthreads_injected__) {
       this.isActive = false;
       this.repliedTweets = new Set();
       this.currentModal = null;
+      this.scanInterval = null;
+      this.batchOpportunities = [];
+      this.lastScanTime = 0;
+      this.lastNotificationTime = 0;
       
       this.init();
     }
@@ -18,15 +44,45 @@ if (!window.__xthreads_injected__) {
     init() {
       console.log('xThreads Content Script initialized');
       this.setupMessageListener();
-      this.addInComposerButtons();
       this.loadRepliedTweets();
       
-      // Watch for new composers and tweets
-      this.setupDOMObserver();
+      // Wait for initial page load then start checking for tweet buttons
+      setTimeout(() => {
+        this.addTweetButtons();
+        this.setupDOMObserver();
+        this.checkMonitoringStatus();
+      }, 2000);
+      
+      // Also check again after a longer delay for SPA navigation
+      setTimeout(() => {
+        this.addTweetButtons();
+      }, 5000);
+
+      // Listen for tab visibility changes
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          this.checkMonitoringStatus();
+        }
+      });
+    }
+
+    async checkMonitoringStatus() {
+      try {
+        // Check if monitoring should be active
+        const result = await chrome.storage.local.get('xthreads_settings');
+        const settings = result.xthreads_settings;
+        
+        if (settings && settings.isActive && settings.apiKey) {
+          console.log('Resuming auto-monitoring on tab focus');
+          this.startAgent(settings);
+        }
+      } catch (error) {
+        console.log('Could not check monitoring status:', error);
+      }
     }
 
     setupMessageListener() {
-      chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      chrome.runtime.onMessage.addListener((message, _, sendResponse) => {
         switch (message.action) {
           case 'startAgent':
             this.startAgent(message.settings);
@@ -38,13 +94,8 @@ if (!window.__xthreads_injected__) {
             sendResponse({ success: true });
             break;
 
-          case 'typeInComposer':
-            this.typeInComposer(message.text);
-            sendResponse({ success: true });
-            break;
-
-          case 'postThread':
-            this.postThread(message.thread);
+          case 'openReplyTab':
+            this.openReplyTab(message.tweetData);
             sendResponse({ success: true });
             break;
 
@@ -63,511 +114,321 @@ if (!window.__xthreads_injected__) {
 
     setupDOMObserver() {
       const observer = new MutationObserver((mutations) => {
+        let shouldCheckTweets = false;
+        
         mutations.forEach((mutation) => {
           mutation.addedNodes.forEach((node) => {
             if (node.nodeType === Node.ELEMENT_NODE) {
-              // Check for new composers
-              if (node.querySelector && (
-                node.querySelector('[data-testid="tweetTextarea_0"]') ||
-                node.matches('[data-testid="tweetTextarea_0"]')
-              )) {
-                setTimeout(() => this.addInComposerButtons(), 500);
+              // Check for new tweets
+              if (node.querySelector?.('[data-testid="tweet"]') || 
+                  node.matches?.('[data-testid="tweet"]')) {
+                shouldCheckTweets = true;
               }
               
-              // Check for new tweets
-              if (node.querySelector && (
-                node.querySelector('[data-testid="tweet"]') ||
-                node.matches('[data-testid="tweet"]')
-              )) {
-                // New tweets detected - could be used for agentic monitoring
+              // Check for tweet actions (reply buttons)
+              if (node.querySelector?.('[data-testid="reply"]') || 
+                  node.matches?.('[data-testid="reply"]')) {
+                shouldCheckTweets = true;
               }
             }
           });
         });
+        
+        if (shouldCheckTweets) {
+          console.log('DOM changed, checking for tweets...');
+          setTimeout(() => this.addTweetButtons(), 100);
+        }
       });
 
       observer.observe(document.body, {
         childList: true,
-        subtree: true
+        subtree: true,
+        attributes: false // Reduce observer overhead
       });
+      
+      // Also run periodically as a fallback
+      setInterval(() => {
+        this.addTweetButtons();
+      }, 5000);
     }
 
-    addInComposerButtons() {
-      // Find tweet composers
-      const composers = document.querySelectorAll('[data-testid="tweetTextarea_0"]');
+    addTweetButtons() {
+      console.log('Looking for tweets to add buttons...');
       
-      composers.forEach(composer => {
-        if (composer.closest('.xthreads-composer-enhanced')) return;
+      // Find all tweets that don't already have xThreads buttons
+      const tweets = document.querySelectorAll('[data-testid="tweet"]:not(.xthreads-enhanced)');
+      console.log(`Found ${tweets.length} new tweets`);
+      
+      tweets.forEach((tweet) => {
+        // Find the reply button container
+        const replyButton = tweet.querySelector('[data-testid="reply"]');
+        if (!replyButton) return;
         
-        const composerContainer = composer.closest('[data-testid="toolBar"]')?.parentElement;
-        if (!composerContainer) return;
-
+        // Get the actions toolbar (parent of reply button)
+        const actionsToolbar = replyButton.closest('[role="group"]');
+        if (!actionsToolbar) return;
+        
         // Mark as enhanced
-        composerContainer.classList.add('xthreads-composer-enhanced');
-
-        // Find toolbar or create button container
-        const toolbar = composerContainer.querySelector('[data-testid="toolBar"]');
-        if (toolbar && !toolbar.querySelector('.xthreads-composer-button')) {
-          this.injectComposerButton(toolbar, composer);
-        }
+        tweet.classList.add('xthreads-enhanced');
+        
+        // Extract tweet data
+        const tweetData = this.extractTweetData(tweet);
+        if (!tweetData) return;
+        
+        // Inject xThreads button next to reply
+        this.injectTweetButton(actionsToolbar, replyButton, tweetData);
       });
     }
 
-    injectComposerButton(toolbar, composer) {
-      const button = document.createElement('button');
-      button.className = 'xthreads-composer-button';
+    injectTweetButton(actionsToolbar, replyButton, tweetData) {
+      // Check if button already exists
+      if (actionsToolbar.querySelector('.xthreads-tweet-button')) return;
+      
+      const button = document.createElement('div');
+      button.className = 'xthreads-tweet-button';
       button.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 2L2 7L12 12L22 7L12 2Z"/>
-          <path d="M2 17L12 22L22 17"/>
-          <path d="M2 12L12 17L22 12"/>
-        </svg>
-        <span>AI</span>
-      `;
-      button.title = 'xThreads AI Assistant';
-      
-      button.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        this.showComposerModal(composer);
-      });
-
-      // Insert at the beginning of toolbar
-      toolbar.insertBefore(button, toolbar.firstChild);
-    }
-
-    showComposerModal(composer) {
-      if (this.currentModal) {
-        this.currentModal.remove();
-      }
-
-      const existingText = composer.textContent || '';
-      
-      const modal = document.createElement('div');
-      modal.className = 'xthreads-modal';
-      modal.innerHTML = `
-        <div class="xthreads-modal-overlay">
-          <div class="xthreads-modal-content">
-            <div class="xthreads-modal-header">
-              <h3>AI Content Assistant</h3>
-              <button class="xthreads-modal-close">×</button>
-            </div>
-            <div class="xthreads-modal-body">
-              <div class="xthreads-option-buttons">
-                <button class="xthreads-option-btn" data-action="generate">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polygon points="5,3 19,12 5,21"/>
-                  </svg>
-                  Generate New
-                </button>
-                <button class="xthreads-option-btn" data-action="rewrite" ${!existingText ? 'disabled' : ''}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                  </svg>
-                  Rewrite Existing
-                </button>
-              </div>
-              
-              <div class="xthreads-content-form" style="display: none;">
-                <div class="xthreads-input-group">
-                  <label>Prompt:</label>
-                  <textarea class="xthreads-prompt-input" rows="3" placeholder="What do you want to write about?"></textarea>
-                </div>
-                
-                <div class="xthreads-form-row">
-                  <div class="xthreads-input-group">
-                    <label>Tone:</label>
-                    <select class="xthreads-tone-select">
-                      <option value="professional">Professional</option>
-                      <option value="casual">Casual</option>
-                      <option value="punchy">Punchy</option>
-                      <option value="educational">Educational</option>
-                      <option value="inspirational">Inspirational</option>
-                      <option value="humorous">Humorous</option>
-                      <option value="empathetic">Empathetic</option>
-                      <option value="encouraging">Encouraging</option>
-                      <option value="authentic">Authentic</option>
-                      <option value="controversial">Controversial</option>
-                      <option value="bold">Bold</option>
-                      <option value="witty">Witty</option>
-                      <option value="insightful">Insightful</option>
-                      <option value="analytical">Analytical</option>
-                      <option value="storytelling">Storytelling</option>
-                    </select>
-                  </div>
-                </div>
-                
-                <div class="xthreads-modal-actions">
-                  <button class="xthreads-btn-secondary xthreads-back-btn">Back</button>
-                  <button class="xthreads-btn-primary xthreads-generate-btn">Generate</button>
-                </div>
-              </div>
-              
-              <div class="xthreads-results" style="display: none;">
-                <div class="xthreads-results-header">
-                  <h4>Generated Content:</h4>
-                  <div class="xthreads-stop-typing" style="display: none;">
-                    <button class="xthreads-stop-btn">Stop Typing</button>
-                  </div>
-                </div>
-                <div class="xthreads-results-list"></div>
-              </div>
-            </div>
-          </div>
+        <div role="button" tabindex="0" style="
+          min-height: 32px;
+          min-width: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 9999px;
+          transition: background-color 0.2s;
+          cursor: pointer;
+          margin: 0 4px;
+        " title="Generate Reply with xThreads">
+          <img src="${chrome.runtime.getURL('assets/icon16.png')}" 
+               width="18" 
+               height="18" 
+               style="opacity: 0.6; transition: opacity 0.2s;" />
         </div>
       `;
-
-      document.body.appendChild(modal);
-      this.currentModal = modal;
-
-      // Bind modal events
-      this.bindModalEvents(modal, composer, existingText);
-    }
-
-    bindModalEvents(modal, composer, existingText) {
-      const closeBtn = modal.querySelector('.xthreads-modal-close');
-      const overlay = modal.querySelector('.xthreads-modal-overlay');
-      const optionButtons = modal.querySelectorAll('.xthreads-option-btn');
-      const contentForm = modal.querySelector('.xthreads-content-form');
-      const backBtn = modal.querySelector('.xthreads-back-btn');
-      const generateBtn = modal.querySelector('.xthreads-generate-btn');
-      const promptInput = modal.querySelector('.xthreads-prompt-input');
-      const stopBtn = modal.querySelector('.xthreads-stop-btn');
-
-      // Close modal
-      const closeModal = () => {
-        globalStopTyping = true;
-        modal.remove();
-        this.currentModal = null;
-      };
-
-      closeBtn.addEventListener('click', closeModal);
-      overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) closeModal();
-      });
-
-      // Option selection
-      optionButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-          const action = btn.dataset.action;
-          
-          // Hide option buttons, show form
-          modal.querySelector('.xthreads-option-buttons').style.display = 'none';
-          contentForm.style.display = 'block';
-          
-          // Pre-fill for rewrite
-          if (action === 'rewrite' && existingText) {
-            promptInput.value = existingText;
-            promptInput.placeholder = 'Edit the content above or describe how to rewrite it...';
-          }
-          
-          generateBtn.dataset.action = action;
-        });
-      });
-
-      // Back button
-      backBtn.addEventListener('click', () => {
-        modal.querySelector('.xthreads-option-buttons').style.display = 'block';
-        contentForm.style.display = 'none';
-        modal.querySelector('.xthreads-results').style.display = 'none';
-      });
-
-      // Generate button
-      generateBtn.addEventListener('click', () => {
-        this.handleModalGenerate(modal, composer, generateBtn.dataset.action);
-      });
-
-      // Stop typing button
-      stopBtn.addEventListener('click', () => {
-        globalStopTyping = true;
-        modal.querySelector('.xthreads-stop-typing').style.display = 'none';
-      });
-
-      // Focus prompt input
-      setTimeout(() => promptInput.focus(), 100);
-    }
-
-    async handleModalGenerate(modal, composer, action) {
-      const promptInput = modal.querySelector('.xthreads-prompt-input');
-      const toneSelect = modal.querySelector('.xthreads-tone-select');
-      const generateBtn = modal.querySelector('.xthreads-generate-btn');
-      const resultsContainer = modal.querySelector('.xthreads-results');
-      const resultsList = modal.querySelector('.xthreads-results-list');
-
-      const prompt = promptInput.value.trim();
-      if (!prompt) {
-        this.showToast('Please enter a prompt', 'error');
-        return;
-      }
-
-      // Get settings from storage
-      const settings = await this.getSettings();
-      if (!settings.apiKey || !settings.selectedBrandId) {
-        this.showToast('Please configure API key and brand space in extension settings', 'error');
-        return;
-      }
-
-      // Show loading
-      generateBtn.disabled = true;
-      generateBtn.textContent = 'Generating...';
-
-      try {
-        let endpoint, body;
-        
-        if (action === 'generate') {
-          endpoint = 'https://www.xthreads.app/api/generate-tweet';
-          body = {
-            prompt: prompt,
-            brandId: settings.selectedBrandId,
-            tone: toneSelect.value
-          };
-        } else {
-          endpoint = 'https://www.xthreads.app/api/rewrite-content';
-          body = {
-            originalContent: prompt,
-            brandId: settings.selectedBrandId,
-            tone: toneSelect.value
-          };
-        }
-
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': settings.apiKey
-          },
-          body: JSON.stringify(body)
-        });
-
-        if (!response.ok) {
-          throw new Error(`API request failed: ${response.status}`);
-        }
-
-        const data = await response.json();
-        let results = [];
-        
-        if (action === 'generate') {
-          results = [data.tweet];
-        } else {
-          results = data.variations || [data.rewrittenContent];
-        }
-
-        // Validate and truncate results
-        results = results.filter(Boolean).map(content => {
-          if (content.length > 280) {
-            this.showToast('Content truncated to 280 characters', 'info');
-            return content.substring(0, 277) + '...';
-          }
-          return content;
-        });
-
-        if (results.length === 0) {
-          throw new Error('No content generated');
-        }
-
-        // Show results
-        this.displayModalResults(modal, results, composer);
-
-      } catch (error) {
-        console.error('Failed to generate content:', error);
-        this.showToast('Failed to generate content. Please try again.', 'error');
-      } finally {
-        generateBtn.disabled = false;
-        generateBtn.textContent = 'Generate';
-      }
-    }
-
-    displayModalResults(modal, results, composer) {
-      const resultsContainer = modal.querySelector('.xthreads-results');
-      const resultsList = modal.querySelector('.xthreads-results-list');
       
-      resultsContainer.style.display = 'block';
-      resultsList.innerHTML = '';
-
-      results.forEach((content, index) => {
-        const resultItem = document.createElement('div');
-        resultItem.className = 'xthreads-result-item';
-        resultItem.innerHTML = `
-          <div class="xthreads-result-text">${content}</div>
-          <div class="xthreads-result-actions">
-            <button class="xthreads-use-btn" data-content="${this.escapeHtml(content)}">Use This</button>
-          </div>
-        `;
-        
-        resultsList.appendChild(resultItem);
+      const buttonElement = button.querySelector('[role="button"]');
+      
+      // Hover effects
+      buttonElement.addEventListener('mouseenter', () => {
+        buttonElement.style.backgroundColor = 'rgba(0, 188, 212, 0.1)';
+        buttonElement.querySelector('img').style.opacity = '1';
+      });
+      
+      buttonElement.addEventListener('mouseleave', () => {
+        buttonElement.style.backgroundColor = 'transparent';
+        buttonElement.querySelector('img').style.opacity = '0.6';
+      });
+      
+      // Click handler
+      buttonElement.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.openReplyWithTweetData(tweetData);
       });
 
-      // Bind use buttons
-      resultsList.querySelectorAll('.xthreads-use-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const content = btn.dataset.content;
-          this.typeTextIntoComposer(composer, content);
-          modal.remove();
-          this.currentModal = null;
-        });
+      // Insert after reply button
+      const replyContainer = replyButton.parentElement;
+      replyContainer.parentNode.insertBefore(button, replyContainer.nextSibling);
+    }
+
+    openReplyWithTweetData(tweetData) {
+      // Store tweet data for popup to access
+      chrome.storage.local.set({
+        xthreads_current_tweet: {
+          ...tweetData,
+          timestamp: Date.now()
+        }
+      });
+      
+      // Show visual indicator since we can't reliably open popup programmatically
+      this.showOpenPopupIndicator();
+      
+      // Also try background script approach as fallback
+      chrome.runtime.sendMessage({
+        action: 'openPopupToReplyTab',
+        tweetData: tweetData
       });
     }
 
-    async typeInComposer(text) {
-      const composer = document.querySelector('[data-testid="tweetTextarea_0"]') ||
-                      document.querySelector('[role="textbox"][contenteditable="true"]');
-      
-      if (!composer) {
-        // Try to open composer
-        const composeBtn = document.querySelector('[data-testid="SideNav_NewTweet_Button"]') ||
-                          document.querySelector('[href="/compose/tweet"]');
-        
-        if (composeBtn) {
-          composeBtn.click();
-          await this.sleep(2000);
-          return this.typeInComposer(text);
-        }
-        
-        throw new Error('Tweet composer not found');
-      }
-
-      await this.typeTextIntoComposer(composer, text);
+    openReplyTab(tweetData) {
+      // This method is called from popup.js message
+      this.openReplyWithTweetData(tweetData);
     }
 
-    async typeTextIntoComposer(composer, text) {
-      // Reset global stop state
-      globalStopTyping = false;
-      
-      // Show stop button if modal is open
-      if (this.currentModal) {
-        const stopContainer = this.currentModal.querySelector('.xthreads-stop-typing');
-        if (stopContainer) stopContainer.style.display = 'block';
-      }
 
-      composer.focus();
-      composer.textContent = '';
 
-      // Type character by character with human-like delays
-      for (let i = 0; i < text.length; i++) {
-        if (globalStopTyping) {
-          console.log('Typing stopped by user');
-          break;
-        }
-
-        const char = text[i];
-        composer.textContent = text.substring(0, i + 1);
-        
-        // Trigger input events for X.com recognition
-        composer.dispatchEvent(new Event('input', { bubbles: true }));
-        composer.dispatchEvent(new Event('change', { bubbles: true }));
-        
-        // Variable delays: 50-150ms, longer for punctuation
-        let delay = Math.floor(Math.random() * 100) + 50; // 50-150ms
-        if (['.', '!', '?', ',', ';', ':'].includes(char)) {
-          delay += Math.floor(Math.random() * 200) + 100; // +100-300ms for punctuation
-        }
-        if (char === '\n') {
-          delay += Math.floor(Math.random() * 300) + 200; // +200-500ms for newlines
-        }
-        
-        await this.sleep(delay);
-      }
-
-      // Hide stop button
-      if (this.currentModal) {
-        const stopContainer = this.currentModal.querySelector('.xthreads-stop-typing');
-        if (stopContainer) stopContainer.style.display = 'none';
-      }
-
-      // Final events
-      composer.dispatchEvent(new Event('input', { bubbles: true }));
-      composer.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-
-    async postThread(thread) {
-      if (!thread || thread.length === 0) return;
-
-      try {
-        // Navigate to compose if not already there
-        if (!window.location.href.includes('/compose/tweet')) {
-          window.location.href = 'https://x.com/compose/tweet';
-          await this.sleep(3000);
-        }
-        
-        for (let i = 0; i < thread.length; i++) {
-          if (globalStopTyping) break;
-          
-          const tweet = thread[i];
-          
-          // Find the current tweet composer
-          const composer = document.querySelector('[data-testid="tweetTextarea_0"]') ||
-                          document.querySelector(`[data-testid="tweetTextarea_${i}"]`) ||
-                          document.querySelector('div[role="textbox"][contenteditable="true"]');
-          
-          if (!composer) {
-            throw new Error(`Tweet composer not found for tweet ${i + 1}`);
-          }
-          
-          // Type the tweet
-          await this.typeTextIntoComposer(composer, tweet);
-          
-          if (globalStopTyping) break;
-          
-          // Add next tweet if not the last one
-          if (i < thread.length - 1) {
-            const addTweetBtn = document.querySelector('[data-testid="addButton"]') ||
-                               document.querySelector('[aria-label="Add tweet"]');
-            
-            if (addTweetBtn) {
-              addTweetBtn.click();
-              await this.sleep(1000);
-            }
-          }
-        }
-        
-        this.showToast('Thread ready to post! Click the Post button to publish.', 'success');
-        
-      } catch (error) {
-        console.error('Failed to post thread:', error);
-        this.showToast('Failed to prepare thread. Please try again.', 'error');
-      }
-    }
 
     // Agentic Reply Functions
     startAgent(settings) {
       this.settings = settings;
       this.isActive = true;
-      console.log('xThreads Agent started');
+      
+      // Start 30-second scanning interval
+      if (this.scanInterval) {
+        clearInterval(this.scanInterval);
+      }
+      
+      this.scanInterval = setInterval(() => {
+        this.performBatchScan();
+      }, 30000); // 30 seconds
+      
+      console.log('xThreads Agent started with 30-second scanning');
+      
+      // Perform initial scan
+      setTimeout(() => this.performBatchScan(), 2000);
     }
 
     stopAgent() {
       this.isActive = false;
+      
+      // Clear scanning interval
+      if (this.scanInterval) {
+        clearInterval(this.scanInterval);
+        this.scanInterval = null;
+      }
+      
       console.log('xThreads Agent stopped');
     }
 
-    async scanForAgenticReplies(settings) {
-      if (!this.isActive || !settings) return;
+    async performBatchScan() {
+      if (!this.isActive || !this.settings) return;
 
       try {
-        // Wait for page to load completely
-        await this.sleep(2000);
-
-        // Find tweets on search results page
+        console.log('Performing batch scan for opportunities...');
+        
+        // Find tweets on current page
         const tweets = document.querySelectorAll('[data-testid="tweet"]');
+        const newOpportunities = [];
         
         for (const tweet of tweets) {
           const tweetData = this.extractTweetData(tweet);
           
-          if (tweetData && this.shouldReplyToTweet(tweetData, settings)) {
-            // Send to background script for processing
-            chrome.runtime.sendMessage({
-              action: 'agenticReplyRequest',
-              tweetData: tweetData
-            });
-            
-            // Only process one tweet per scan to avoid spam
-            break;
+          if (tweetData && this.shouldReplyToTweet(tweetData, this.settings)) {
+            // Check if we already have this opportunity
+            const exists = this.batchOpportunities.some(op => op.id === tweetData.id);
+            if (!exists) {
+              // Generate reply for this opportunity
+              const reply = await this.generateReplyForTweet(tweetData);
+              if (reply) {
+                const opportunity = {
+                  ...tweetData,
+                  reply: reply,
+                  foundAt: Date.now()
+                };
+                
+                newOpportunities.push(opportunity);
+                this.batchOpportunities.push(opportunity);
+              }
+            }
           }
         }
         
+        // If we found new opportunities, store them and check for batch notification
+        if (newOpportunities.length > 0) {
+          console.log(`Found ${newOpportunities.length} new opportunities`);
+          await this.storeBatchOpportunities();
+          
+          // Check if we should notify (batch of 3+ or 2 minutes since last notification)
+          const shouldNotify = this.shouldSendBatchNotification();
+          if (shouldNotify) {
+            this.sendBatchNotification();
+          }
+        }
+        
+        // Clean up old opportunities (older than 1 hour)
+        this.cleanupOldOpportunities();
+        
       } catch (error) {
-        console.error('Failed to scan for agentic replies:', error);
+        console.error('Failed to perform batch scan:', error);
+      }
+    }
+
+    async scanForAgenticReplies(settings) {
+      // This method is called from popup for manual refresh
+      this.settings = settings;
+      await this.performBatchScan();
+    }
+
+    async generateReplyForTweet(tweetData) {
+      if (!this.settings?.apiKey || !this.settings?.selectedBrandId) {
+        console.log('Missing API key or brand ID for reply generation');
+        return null;
+      }
+
+      try {
+        const response = await fetch('https://www.xthreads.app/api/ai-reply', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': this.settings.apiKey
+          },
+          body: JSON.stringify({
+            parentTweetContent: tweetData.content,
+            brandId: this.settings.selectedBrandId,
+            tone: this.settings.tone || 'professional'
+          })
+        });
+
+        if (!response.ok) {
+          console.error(`Reply generation failed: ${response.status}`);
+          return null;
+        }
+
+        const data = await response.json();
+        return data.reply || data.content;
+        
+      } catch (error) {
+        console.error('Failed to generate reply:', error);
+        return null;
+      }
+    }
+
+    shouldSendBatchNotification() {
+      const now = Date.now();
+      const timeSinceLastNotification = now - this.lastNotificationTime;
+      const pendingCount = this.batchOpportunities.length;
+      
+      // Notify if we have 3+ opportunities OR 2+ minutes since last notification
+      return (pendingCount >= 3) || (pendingCount >= 1 && timeSinceLastNotification > 120000);
+    }
+
+    async sendBatchNotification() {
+      const count = this.batchOpportunities.length;
+      if (count === 0) return;
+      
+      this.lastNotificationTime = Date.now();
+      
+      // Send message to background script for notification
+      chrome.runtime.sendMessage({
+        action: 'showBatchNotification',
+        count: count,
+        opportunities: this.batchOpportunities.slice(0, 5) // Send first 5 for preview
+      });
+      
+      console.log(`Sent batch notification for ${count} opportunities`);
+    }
+
+    async storeBatchOpportunities() {
+      try {
+        await chrome.storage.local.set({
+          xthreads_batch_opportunities: this.batchOpportunities
+        });
+      } catch (error) {
+        console.error('Failed to store batch opportunities:', error);
+      }
+    }
+
+    cleanupOldOpportunities() {
+      const oneHourAgo = Date.now() - (60 * 60 * 1000);
+      const initialCount = this.batchOpportunities.length;
+      
+      this.batchOpportunities = this.batchOpportunities.filter(
+        opportunity => opportunity.foundAt > oneHourAgo
+      );
+      
+      const removedCount = initialCount - this.batchOpportunities.length;
+      if (removedCount > 0) {
+        console.log(`Cleaned up ${removedCount} old opportunities`);
+        this.storeBatchOpportunities();
       }
     }
 
@@ -604,13 +465,66 @@ if (!window.__xthreads_injected__) {
       const oneHourAgo = Date.now() - (60 * 60 * 1000);
       if (tweetData.timestamp < oneHourAgo) return false;
       
-      // Check if tweet contains keywords
+      // Check if tweet contains keywords (primary)
       const content = tweetData.content.toLowerCase();
-      const hasKeyword = settings.keywords.some(keyword => 
-        content.includes(keyword.toLowerCase())
-      );
+      const keywords = settings.keywords || [];
       
-      return hasKeyword;
+      if (keywords.length > 0) {
+        const hasKeyword = keywords.some(keyword => 
+          content.includes(keyword.toLowerCase())
+        );
+        if (hasKeyword) return true;
+      }
+      
+      // Fallback: Check for general engagement opportunities
+      return this.isGoodReplyOpportunity(tweetData, content);
+    }
+
+    isGoodReplyOpportunity(tweetData, content) {
+      // Skip if too many replies already (indicates high engagement tweet)
+      const tweetElement = document.querySelector(`[href*="${tweetData.id}"]`)?.closest('[data-testid="tweet"]');
+      if (tweetElement) {
+        const replyButton = tweetElement.querySelector('[data-testid="reply"]');
+        const replyCount = replyButton?.textContent?.trim();
+        if (replyCount && parseInt(replyCount) > 50) {
+          return false; // Skip tweets with 50+ replies
+        }
+      }
+      
+      // Look for engagement patterns that suggest good reply opportunities
+      const engagementPatterns = [
+        // Questions
+        /\?$/,
+        /what.*think/i,
+        /anyone.*know/i,
+        /thoughts.*on/i,
+        
+        // Statements seeking validation/discussion
+        /agree.*disagree/i,
+        /unpopular.*opinion/i,
+        /controversial.*take/i,
+        /hot.*take/i,
+        
+        // Experience sharing
+        /in my experience/i,
+        /learned.*lesson/i,
+        /mistake.*made/i,
+        /tip.*trick/i,
+        
+        // Common business/tech keywords
+        /startup/i,
+        /entrepreneur/i,
+        /product.*launch/i,
+        /growth.*hack/i,
+        /marketing/i,
+        /saas/i,
+        /build.*public/i,
+        /side.*project/i,
+        /freelanc/i,
+        /remote.*work/i
+      ];
+      
+      return engagementPatterns.some(pattern => pattern.test(content));
     }
 
     showAgenticReplyNotification(tweetData, reply) {
@@ -742,6 +656,92 @@ if (!window.__xthreads_injected__) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+    }
+
+    showOpenPopupIndicator() {
+      // Remove existing indicator
+      const existing = document.querySelector('.xthreads-popup-indicator');
+      if (existing) existing.remove();
+
+      const indicator = document.createElement('div');
+      indicator.className = 'xthreads-popup-indicator';
+      indicator.innerHTML = `
+        <div class="xthreads-indicator-content">
+          <div class="xthreads-indicator-icon">
+            <img src="${chrome.runtime.getURL('assets/icon16.png')}" width="20" height="20" />
+          </div>
+          <div class="xthreads-indicator-text">
+            Click the xThreads extension icon to generate your reply
+          </div>
+          <button class="xthreads-indicator-close">×</button>
+        </div>
+      `;
+
+      // Add styles
+      const style = document.createElement('style');
+      style.textContent = `
+        .xthreads-popup-indicator {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          z-index: 999999;
+          background: #00bcd4;
+          color: white;
+          border-radius: 8px;
+          padding: 12px 16px;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          font-size: 14px;
+          max-width: 300px;
+          animation: slideInRight 0.3s ease-out;
+        }
+        
+        .xthreads-indicator-content {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        
+        .xthreads-indicator-text {
+          flex: 1;
+          line-height: 1.4;
+        }
+        
+        .xthreads-indicator-close {
+          background: none;
+          border: none;
+          color: white;
+          font-size: 18px;
+          cursor: pointer;
+          padding: 0;
+          line-height: 1;
+        }
+        
+        @keyframes slideInRight {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+
+      document.body.appendChild(indicator);
+
+      // Bind close button
+      const closeBtn = indicator.querySelector('.xthreads-indicator-close');
+      closeBtn.addEventListener('click', () => indicator.remove());
+
+      // Auto-remove after 8 seconds
+      setTimeout(() => {
+        if (indicator.parentNode) {
+          indicator.remove();
+        }
+      }, 8000);
     }
 
     showToast(message, type = 'info') {

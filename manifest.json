@@ -8,7 +8,8 @@
     "scripting",
     "storage",
     "tabs",
-    "declarativeContent"
+    "declarativeContent",
+    "notifications"
   ],
   "host_permissions": [
     "https://www.xthreads.app/*",
