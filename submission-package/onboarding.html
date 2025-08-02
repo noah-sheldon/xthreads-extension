@@ -1,0 +1,185 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>xThreads Extension - Setup</title>
+    <link rel="stylesheet" href="onboarding.css" />
+  </head>
+  <body>
+    <div class="container">
+      <!-- Step Indicator -->
+      <div class="step-indicator">
+        <div class="step active" id="step1-indicator">
+          <div class="step-number">1</div>
+          <div class="step-label">API Key</div>
+        </div>
+        <div class="step-line"></div>
+        <div class="step" id="step2-indicator">
+          <div class="step-number">2</div>
+          <div class="step-label">Settings</div>
+        </div>
+      </div>
+
+      <!-- Step 1: API Key Setup -->
+      <div class="step-content" id="step1">
+        <div class="header">
+          <img src="assets/icon48.png" alt="xThreads" class="logo" />
+          <h1>Welcome to xThreads Agent</h1>
+          <p>Let's start by verifying your API key</p>
+        </div>
+
+        <div class="setup-card">
+          <h2>Step 1 of 2: API Key Setup</h2>
+          <p>Enter your xThreads.app API key to get started:</p>
+
+          <!-- NEW USER INSTRUCTIONS ADDED HERE -->
+          <div class="new-user-guide">
+            <h3>New to xThreads.app?</h3>
+            <p>
+              You'll need an API key from your xThreads.app account.
+              <br />
+              <a
+                href="https://www.xthreads.app/"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="link-teal"
+                >Sign up for a free account here</a
+              >.
+            </p>
+            <p>
+              After signing in, navigate to your
+              <a
+                href="https://www.xthreads.app/profile"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="link-teal"
+                >Profile page</a
+              >
+              to find and copy your API Key. Then, paste it below.
+            </p>
+          </div>
+          <!-- END NEW USER INSTRUCTIONS -->
+
+          <div class="input-group">
+            <label for="apiKey">xThreads.app API Key</label>
+            <input
+              type="password"
+              id="apiKey"
+              placeholder="Enter your API key"
+              autocomplete="off"
+            />
+            <div class="error-message" id="errorMessage"></div>
+          </div>
+
+          <div class="button-group">
+            <button id="nextBtn" class="btn-primary" disabled>Next</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Initial Settings -->
+      <div class="step-content" id="step2" style="display: none">
+        <div class="header">
+          <img src="assets/icon48.png" alt="xThreads" class="logo" />
+          <h1>Initial Settings</h1>
+          <p>Configure your preferences for AI-powered content creation</p>
+        </div>
+
+        <div class="setup-card">
+          <h2>Step 2 of 2: Configure Settings</h2>
+
+          <div class="input-group">
+            <label for="brandSpaces">Brand Space</label>
+            <select id="brandSpaces">
+              <option value="">Loading brand spaces...</option>
+            </select>
+            <small>Select your brand space for content generation</small>
+          </div>
+
+          <div class="input-group">
+            <label for="keywords">Agentic Keywords</label>
+            <textarea
+              id="keywords"
+              placeholder="build in public, SaaS, marketing"
+              rows="3"
+            ></textarea>
+            <small>Comma-separated keywords for auto-reply monitoring</small>
+          </div>
+          <div class="input-group">
+            <label for="tone">Default Tone</label>
+            <div class="tone-selector">
+              <input type="radio" id="professional" name="tone" value="professional" checked />
+              <label for="professional">Professional</label>
+              
+              <input type="radio" id="casual" name="tone" value="casual" />
+              <label for="casual">Casual</label>
+              
+              <input type="radio" id="punchy" name="tone" value="punchy" />
+              <label for="punchy">Punchy</label>
+              
+              <input type="radio" id="educational" name="tone" value="educational" />
+              <label for="educational">Educational</label>
+              
+              <input type="radio" id="inspirational" name="tone" value="inspirational" />
+              <label for="inspirational">Inspirational</label>
+              
+              <input type="radio" id="humorous" name="tone" value="humorous" />
+              <label for="humorous">Humorous</label>
+              
+              <input type="radio" id="empathetic" name="tone" value="empathetic" />
+              <label for="empathetic">Empathetic</label>
+              
+              <input type="radio" id="encouraging" name="tone" value="encouraging" />
+              <label for="encouraging">Encouraging</label>
+              
+              <input type="radio" id="authentic" name="tone" value="authentic" />
+              <label for="authentic">Authentic</label>
+              
+              <input type="radio" id="controversial" name="tone" value="controversial" />
+              <label for="controversial">Controversial</label>
+              
+              <input type="radio" id="bold" name="tone" value="bold" />
+              <label for="bold">Bold</label>
+              
+              <input type="radio" id="witty" name="tone" value="witty" />
+              <label for="witty">Witty</label>
+              
+              <input type="radio" id="insightful" name="tone" value="insightful" />
+              <label for="insightful">Insightful</label>
+              
+              <input type="radio" id="analytical" name="tone" value="analytical" />
+              <label for="analytical">Analytical</label>
+              
+              <input type="radio" id="storytelling" name="tone" value="storytelling" />
+              <label for="storytelling">Storytelling</label>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button id="backBtn" class="btn-secondary">Back</button>
+            <button id="finishBtn" class="btn-primary">Finish Setup</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Success State -->
+      <div class="step-content" id="success" style="display: none">
+        <div class="success-card">
+          <div class="success-icon">✓</div>
+          <h2>Setup Complete!</h2>
+          <p>
+            Your xThreads Agent is ready to help you create amazing content on
+            X.
+          </p>
+          <button id="getStartedBtn" class="btn-primary">Get Started</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toastContainer" class="toast-container"></div>
+    <script type="module" src="onboarding.js"></script>
+  </body>
+</html>
+```

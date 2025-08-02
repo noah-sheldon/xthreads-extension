@@ -7,8 +7,12 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:production": "node build-production.cjs",
+    "build:prod": "./build-production.sh",
+    "package": "npm run build:production"
   },
+
   "dependencies": {
     "lucide-react": "^0.344.0",
     "react": "^18.3.1",
