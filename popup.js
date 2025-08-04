@@ -1262,6 +1262,8 @@ if (!window.__xthreads_popup_injected__) {
         const result = await chrome.storage.local.get('xthreads_batch_opportunities');
         const opportunities = result.xthreads_batch_opportunities || [];
         
+        console.log(`📱 Popup checking opportunities: found ${opportunities.length}`, opportunities);
+        
         // Always display opportunities UI
         this.displayBatchOpportunities(opportunities);
         
@@ -1366,17 +1368,28 @@ if (!window.__xthreads_popup_injected__) {
     }
 
     displayBatchOpportunities(opportunities) {
+      console.log(`🎯 Displaying ${opportunities.length} opportunities in popup`);
+      
       const batchOpportunities = document.getElementById('batchOpportunities');
       const replySection = document.getElementById('replySection');
       const batchTitle = document.getElementById('batchTitle');
       const opportunitiesList = document.getElementById('opportunitiesList');
       
+      console.log('🔍 DOM elements found:', {
+        batchOpportunities: !!batchOpportunities,
+        replySection: !!replySection,
+        batchTitle: !!batchTitle,
+        opportunitiesList: !!opportunitiesList
+      });
+      
       if (!opportunities || opportunities.length === 0) {
+        console.log('📭 No opportunities to display, showing empty state');
         if (batchOpportunities) batchOpportunities.style.display = 'none';
         if (replySection) replySection.style.display = 'block';
         return;
       }
       
+      console.log('📊 Showing batch opportunities UI');
       // Show batch opportunities, hide single reply section
       if (batchOpportunities) batchOpportunities.style.display = 'block';
       if (replySection) replySection.style.display = 'none';
@@ -1384,6 +1397,7 @@ if (!window.__xthreads_popup_injected__) {
       // Update title
       if (batchTitle) {
         batchTitle.textContent = `Reply Opportunities (${opportunities.length})`;
+        console.log(`📝 Updated title to: Reply Opportunities (${opportunities.length})`);
       }
       
       // Clear and populate list
@@ -1962,6 +1976,40 @@ if (!window.__xthreads_popup_injected__) {
       }
     }
 
+    handleAgentStopped(message) {
+      console.log('🛑 Received agent stopped message:', message);
+      
+      // Update settings to reflect agent is now inactive
+      this.settings.isActive = false;
+      this.saveSettings();
+      
+      // Update UI toggles
+      const agentToggle = document.getElementById("agentToggle");
+      const autoMonitoringToggle = document.getElementById("autoMonitoringToggle");
+      
+      if (agentToggle) {
+        agentToggle.checked = false;
+        console.log('✅ Updated agent toggle to OFF');
+      }
+      
+      if (autoMonitoringToggle) {
+        autoMonitoringToggle.checked = false;
+        console.log('✅ Updated auto-monitoring toggle to OFF');
+      }
+      
+      // Update UI status indicators
+      this.updateUI();
+      
+      // Show completion message
+      const completionMessage = message.opportunitiesFound > 0 
+        ? `Scan complete! Found ${message.opportunitiesFound} opportunities. Agent automatically stopped.`
+        : 'Scan complete! No relevant opportunities found. Agent automatically stopped.';
+      
+      this.showToast(completionMessage, 'success');
+      
+      console.log('🔄 UI updated to reflect agent stopped state');
+    }
+
     showToast(message, type = "info") {
       const container = document.getElementById("toastContainer");
       const toast = document.createElement("div");
@@ -1980,13 +2028,18 @@ if (!window.__xthreads_popup_injected__) {
 
   // Initialize popup when DOM is loaded
   document.addEventListener("DOMContentLoaded", () => {
-    new XThreadsPopup();
+    window.xThreadsPopupInstance = new XThreadsPopup();
   });
 
   // Listen for messages from content script
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "updateStats") {
       // Handle stats updates if needed
+    } else if (message.action === "agentStopped") {
+      // Handle agent stopped notification
+      if (window.xThreadsPopupInstance) {
+        window.xThreadsPopupInstance.handleAgentStopped(message);
+      }
     }
   });
 }

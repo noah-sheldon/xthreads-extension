@@ -7,7 +7,7 @@
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   width: 400px;
-  min-height: 600px;
+  min-height: 640px;
   background: #ffffff;
   color: #1f2937;
   font-size: 14px;
@@ -256,7 +256,7 @@ body {
 }
 
 .api-key-masked {
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
   font-size: 13px;
   color: #374151;
   font-weight: 500;
@@ -268,7 +268,7 @@ body {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: #00BCD4;
+  color: #00bcd4;
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
@@ -278,7 +278,7 @@ body {
 
 .api-key-edit-btn:hover {
   background: rgba(0, 188, 212, 0.1);
-  color: #00ACC1;
+  color: #00acc1;
   transform: translateY(-1px);
 }
 
@@ -1324,4 +1324,3 @@ input:checked + .slider:before {
 ::-webkit-scrollbar-thumb:hover {
   background: #9ca3af;
 }
-

@@ -151,7 +151,17 @@ class XThreadsBackground {
           break;
 
         case "showBatchNotification":
-          await this.showBatchNotification(message.count, message.opportunities);
+          await this.showBatchNotification(message.count, message.opportunities, message.scanComplete);
+          sendResponse({ success: true });
+          break;
+
+        case "clearAllNotifications":
+          await this.clearAllNotifications();
+          sendResponse({ success: true });
+          break;
+
+        case "liveOpportunityUpdate":
+          await this.handleLiveUpdate(message.count, message.opportunities);
           sendResponse({ success: true });
           break;
 
@@ -437,18 +447,23 @@ class XThreadsBackground {
     }
   }
 
-  async showBatchNotification(count, opportunities) {
+  async showBatchNotification(count, opportunities, scanComplete = false) {
     try {
       // Update badge
       await chrome.action.setBadgeText({ text: count.toString() });
-      await chrome.action.setBadgeBackgroundColor({ color: '#00bcd4' });
+      await chrome.action.setBadgeBackgroundColor({ color: scanComplete ? '#4CAF50' : '#00bcd4' });
       
       // Show browser notification
+      const title = scanComplete ? 'xThreads - Scan Complete!' : 'xThreads - Growth Opportunities';
+      const message = scanComplete ? 
+        `Found ${count} growth opportunities! Agent scan completed.` :
+        `Found ${count} growth opportunities so far...`;
+      
       const notificationId = await chrome.notifications.create({
         type: 'basic',
         iconUrl: 'assets/icon48.png',
-        title: 'xThreads - Reply Opportunities',
-        message: `Found ${count} new reply opportunities. Click to review.`,
+        title: title,
+        message: message,
         priority: 1,
         requireInteraction: true
       });
@@ -459,14 +474,56 @@ class XThreadsBackground {
           id: notificationId,
           count: count,
           timestamp: Date.now(),
+          opportunities: opportunities,
+          scanComplete: scanComplete
+        }
+      });
+      
+      console.log(`Batch notification shown for ${count} opportunities${scanComplete ? ' (scan complete)' : ''}`);
+      
+    } catch (error) {
+      console.error('Failed to show batch notification:', error);
+    }
+  }
+
+  async clearAllNotifications() {
+    try {
+      // Clear badge
+      await chrome.action.setBadgeText({ text: '' });
+      
+      // Clear any existing notifications
+      const notifications = await chrome.notifications.getAll();
+      for (const notificationId in notifications) {
+        await chrome.notifications.clear(notificationId);
+      }
+      
+      // Clear stored notification data
+      await chrome.storage.local.remove('xthreads_last_notification');
+      
+      console.log('All notifications and badges cleared');
+    } catch (error) {
+      console.error('Failed to clear notifications:', error);
+    }
+  }
+
+  async handleLiveUpdate(count, opportunities) {
+    try {
+      // Update badge with current count
+      await chrome.action.setBadgeText({ text: count.toString() });
+      await chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' }); // Green for in-progress
+      
+      // Store live update for popup to access
+      await chrome.storage.local.set({
+        xthreads_live_update: {
+          count: count,
+          timestamp: Date.now(),
           opportunities: opportunities
         }
       });
       
-      console.log(`Sent batch notification for ${count} opportunities`);
-      
+      console.log(`Live update: ${count} opportunities found so far`);
     } catch (error) {
-      console.error('Failed to show batch notification:', error);
+      console.error('Failed to handle live update:', error);
     }
   }
 

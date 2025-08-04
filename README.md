@@ -17,10 +17,10 @@
 - **15+ Tone Options**: Professional, casual, witty, educational, and more
 
 ### **Agentic Reply System**
-- **Automated Monitoring**: Background scanning every 30 seconds for opportunities
-- **Keyword Targeting**: Smart detection based on your specified keywords
-- **Batch Management**: Process multiple reply opportunities efficiently
-- **Individual Controls**: Open, copy, edit, or skip each opportunity
+- **One-Time Page Scan**: Finds exactly 10 opportunities on current page then stops automatically
+- **Deep Auto-Scroll**: Scrolls down 10 times to load more tweets for comprehensive discovery
+- **Relaxed Targeting**: Targets tweets with 1-50 likes and <25 replies for better opportunity finding
+- **Persistent Storage**: Opportunities stored indefinitely until manually cleared or new scan
 
 ### **Professional Workflow**
 - **Copy-to-Clipboard**: Reliable workflow that works with any X.com interface
@@ -95,11 +95,12 @@
 4. Copy and paste the reply into X.com
 
 ### **Agentic Reply System**
-1. Enable auto-monitoring in "Agentic Reply" tab
-2. Set your target keywords
-3. Extension scans X.com every 30 seconds
-4. Review opportunities in batch interface
-5. Use individual controls: Open tweet, Copy reply, Edit, or Skip
+1. Click "Start Agent" in "Agentic Reply" tab
+2. Set your target keywords for content discovery
+3. Agent performs deep auto-scroll scan on current page (10 scrolls)
+4. Agent finds up to 10 opportunities matching your keywords/engagement criteria and stops
+5. Review stored opportunities and manually select which replies to post
+6. Opportunities remain available until you manually clear or start a new scan
 
 ## ⚙️ Configuration
 
@@ -109,11 +110,12 @@
 - **Keywords**: Comma-separated terms for monitoring
 - **Default Tone**: Choose from 15+ available tones
 
-### **Auto-Monitoring**
-- **Enable/Disable**: Toggle automatic opportunity detection
-- **Scan Frequency**: Every 30 seconds when active
-- **Smart Filtering**: English tweets with 10+ likes
-- **Batch Notifications**: Alerts when opportunities are found
+### **Agent System**  
+- **One-Time Activation**: Click "Start Agent" for each scan session
+- **Current Page Only**: No navigation - stays on page you're currently viewing
+- **Deep Auto-Scroll**: Automatically scrolls down 10 times to load more content
+- **Relaxed Filtering**: Targets tweets with 1-50 likes and <25 replies for more opportunities
+- **Automatic Completion**: Agent stops after finding 10 opportunities or completing 10 scrolls
 
 ## 🔒 Privacy & Security
 

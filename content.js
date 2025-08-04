@@ -262,90 +262,207 @@ if (!window.__xthreads_injected__) {
       this.settings = settings;
       this.isActive = true;
       
-      // Start 30-second scanning interval
-      if (this.scanInterval) {
-        clearInterval(this.scanInterval);
-      }
-      
-      this.scanInterval = setInterval(() => {
-        this.performBatchScan();
-      }, 30000); // 30 seconds
-      
-      console.log('xThreads Agent started with 30-second scanning');
-      
-      // Perform initial scan
-      setTimeout(() => this.performBatchScan(), 2000);
-    }
-
-    stopAgent() {
-      this.isActive = false;
-      
-      // Clear scanning interval
+      // Clear any existing intervals
       if (this.scanInterval) {
         clearInterval(this.scanInterval);
         this.scanInterval = null;
       }
       
-      console.log('xThreads Agent stopped');
+      console.log('🚀 xThreads Agent started - One-time comprehensive scan for 10 opportunities');
+      
+      // Clear previous opportunities when starting new scan
+      this.batchOpportunities = [];
+      this.storeBatchOpportunities();
+      
+      // Start comprehensive scan immediately
+      setTimeout(() => this.performComprehensiveScan(), 2000);
     }
 
-    async performBatchScan() {
-      if (!this.isActive || !this.settings) return;
+    stopAgent() {
+      this.isActive = false;
+      
+      // Clear scanning interval if exists
+      if (this.scanInterval) {
+        clearInterval(this.scanInterval);
+        this.scanInterval = null;
+      }
+      
+      console.log('🛑 xThreads Agent stopped');
+    }
 
+    async performComprehensiveScan() {
+      if (!this.isActive || !this.settings) return;
+      
+      const maxOpportunities = 10;
+      console.log(`🔍 Starting simplified scan for ${maxOpportunities} opportunities on current page...`);
+      
       try {
-        console.log('Performing batch scan for opportunities...');
+        // Single phase: Scan current page with deep scrolling
+        console.log('📄 Scanning current page with deep auto-scroll...');
+        await this.scanCurrentPageWithDeepScroll();
         
-        // Find tweets on current page
+        // Complete scan regardless of count found
+        return this.completeScan();
+        
+      } catch (error) {
+        console.error('❌ Scan failed:', error);
+        this.completeScan();
+      }
+    }
+    
+    async scanCurrentPageWithDeepScroll() {
+      const maxOpportunities = 10;
+      let foundTotal = 0;
+      
+      try {
+        console.log('📄 Starting deep scroll scan (10 scrolls)...');
+        
+        // Deep auto-scroll to load more tweets (10 scrolls)
+        for (let i = 0; i < 10 && this.batchOpportunities.length < maxOpportunities; i++) {
+          console.log(`📜 Scroll ${i + 1}/10... (current opportunities: ${this.batchOpportunities.length}/${maxOpportunities})`);
+          
+          // Check if we've reached the limit before scrolling
+          if (this.batchOpportunities.length >= maxOpportunities) {
+            console.log(`🛑 Reached ${maxOpportunities} opportunities limit, stopping scan`);
+            break;
+          }
+          
+          window.scrollTo(0, document.body.scrollHeight);
+          await this.sleep(2000); // Wait for new tweets to load
+          
+          // Scan new tweets after each scroll
+          const newTweets = await this.scanNewTweetsOnPage();
+          foundTotal += newTweets;
+          
+          if (newTweets > 0) {
+            console.log(`🎯 Found ${newTweets} new opportunities after scroll ${i + 1} (total: ${this.batchOpportunities.length})`);
+          }
+          
+          // Double-check limit after scanning
+          if (this.batchOpportunities.length >= maxOpportunities) {
+            console.log(`🛑 Reached ${maxOpportunities} opportunities after scanning, stopping`);
+            break;
+          }
+        }
+        
+        console.log(`📊 Deep scroll complete: Found ${foundTotal} total opportunities`);
+        return foundTotal;
+        
+      } catch (error) {
+        console.error('Failed to perform deep scroll scan:', error);
+        return foundTotal;
+      }
+    }
+    
+    async scanNewTweetsOnPage() {
+      const maxOpportunities = 10;
+      let foundOnThisPass = 0;
+      
+      try {
         const tweets = document.querySelectorAll('[data-testid="tweet"]');
-        const newOpportunities = [];
         
         for (const tweet of tweets) {
+          if (this.batchOpportunities.length >= maxOpportunities) break;
+          
           const tweetData = this.extractTweetData(tweet);
           
-          if (tweetData && this.shouldReplyToTweet(tweetData, this.settings)) {
-            // Check if we already have this opportunity
-            const exists = this.batchOpportunities.some(op => op.id === tweetData.id);
-            if (!exists) {
+          if (tweetData && this.isGrowthOpportunity(tweetData, this.settings)) {
+            // Check if we already have this opportunity (in current batch OR in storage)
+            const existsInBatch = this.batchOpportunities.some(op => op.id === tweetData.id);
+            const existsInStorage = await this.checkIfTweetProcessed(tweetData.id);
+            
+            if (!existsInBatch && !existsInStorage) {
+              console.log(`✅ Found opportunity: ${tweetData.content.substring(0, 50)}...`);
+              
               // Generate reply for this opportunity
+              console.log(`🔄 Generating reply for tweet: ${tweetData.id}`);
               const reply = await this.generateReplyForTweet(tweetData);
+              console.log(`📝 Reply generated:`, reply ? `"${reply.substring(0, 50)}..."` : 'FAILED');
+              
               if (reply) {
                 const opportunity = {
                   ...tweetData,
                   reply: reply,
-                  foundAt: Date.now()
+                  foundAt: Date.now(),
+                  source: 'current page'
                 };
                 
-                newOpportunities.push(opportunity);
                 this.batchOpportunities.push(opportunity);
+                foundOnThisPass++;
+                
+                // Store opportunities immediately
+                await this.storeBatchOpportunities();
+                console.log(`💾 Stored ${this.batchOpportunities.length} opportunities to storage`);
+                
+                // Send live update to popup
+                this.sendLiveUpdate();
+                
+                console.log(`🎯 Opportunity ${this.batchOpportunities.length}/${maxOpportunities} added and stored`);
+              } else {
+                console.log(`❌ Failed to generate reply for tweet ${tweetData.id}, skipping`);
+              }
+            } else {
+              if (existsInBatch) {
+                console.log(`⏭️  Tweet ${tweetData.id} already in current batch, skipping`);
+              }
+              if (existsInStorage) {
+                console.log(`⏭️  Tweet ${tweetData.id} already in storage, skipping`);
               }
             }
           }
         }
         
-        // If we found new opportunities, store them and check for batch notification
-        if (newOpportunities.length > 0) {
-          console.log(`Found ${newOpportunities.length} new opportunities`);
-          await this.storeBatchOpportunities();
-          
-          // Check if we should notify (batch of 3+ or 2 minutes since last notification)
-          const shouldNotify = this.shouldSendBatchNotification();
-          if (shouldNotify) {
-            this.sendBatchNotification();
-          }
-        }
-        
-        // Clean up old opportunities (older than 1 hour)
-        this.cleanupOldOpportunities();
+        return foundOnThisPass;
         
       } catch (error) {
-        console.error('Failed to perform batch scan:', error);
+        console.error('Failed to scan new tweets:', error);
+        return foundOnThisPass;
       }
+    }
+    
+    
+    async completeScan() {
+      console.log(`🏁 Comprehensive scan completed! Found ${this.batchOpportunities.length} growth opportunities`);
+      
+      // Store all opportunities
+      await this.storeBatchOpportunities();
+      
+      // Send final notification
+      if (this.batchOpportunities.length > 0) {
+        this.sendBatchNotification(true); // Mark as scan complete
+      }
+      
+      // Turn off agent
+      this.isActive = false;
+      
+      // Notify popup that agent has stopped
+      try {
+        chrome.runtime.sendMessage({
+          action: 'agentStopped',
+          reason: 'scanComplete',
+          opportunitiesFound: this.batchOpportunities.length
+        });
+        console.log('📱 Sent agent stopped message to popup');
+      } catch (error) {
+        console.log('Could not notify popup of agent stop:', error);
+      }
+      
+      console.log('🛑 Agent automatically stopped after comprehensive scan');
+    }
+    
+    sendLiveUpdate() {
+      // Send live update to background script for popup badge
+      chrome.runtime.sendMessage({
+        action: 'liveOpportunityUpdate',
+        count: this.batchOpportunities.length,
+        opportunities: this.batchOpportunities.slice(-3) // Send last 3 for preview
+      });
     }
 
     async scanForAgenticReplies(settings) {
-      // This method is called from popup for manual refresh
+      // This method is called from popup for manual refresh - now uses comprehensive scan
       this.settings = settings;
-      await this.performBatchScan();
+      await this.performComprehensiveScan();
     }
 
     async generateReplyForTweet(tweetData) {
@@ -382,16 +499,7 @@ if (!window.__xthreads_injected__) {
       }
     }
 
-    shouldSendBatchNotification() {
-      const now = Date.now();
-      const timeSinceLastNotification = now - this.lastNotificationTime;
-      const pendingCount = this.batchOpportunities.length;
-      
-      // Notify if we have 3+ opportunities OR 2+ minutes since last notification
-      return (pendingCount >= 3) || (pendingCount >= 1 && timeSinceLastNotification > 120000);
-    }
-
-    async sendBatchNotification() {
+    async sendBatchNotification(scanComplete = false) {
       const count = this.batchOpportunities.length;
       if (count === 0) return;
       
@@ -401,10 +509,11 @@ if (!window.__xthreads_injected__) {
       chrome.runtime.sendMessage({
         action: 'showBatchNotification',
         count: count,
-        opportunities: this.batchOpportunities.slice(0, 5) // Send first 5 for preview
+        opportunities: this.batchOpportunities.slice(0, 5), // Send first 5 for preview
+        scanComplete: scanComplete
       });
       
-      console.log(`Sent batch notification for ${count} opportunities`);
+      console.log(`📢 Sent batch notification for ${count} opportunities${scanComplete ? ' (scan complete)' : ''}`);
     }
 
     async storeBatchOpportunities() {
@@ -417,19 +526,30 @@ if (!window.__xthreads_injected__) {
       }
     }
 
-    cleanupOldOpportunities() {
-      const oneHourAgo = Date.now() - (60 * 60 * 1000);
-      const initialCount = this.batchOpportunities.length;
-      
-      this.batchOpportunities = this.batchOpportunities.filter(
-        opportunity => opportunity.foundAt > oneHourAgo
-      );
-      
-      const removedCount = initialCount - this.batchOpportunities.length;
-      if (removedCount > 0) {
-        console.log(`Cleaned up ${removedCount} old opportunities`);
-        this.storeBatchOpportunities();
+    async checkIfTweetProcessed(tweetId) {
+      try {
+        // Check if tweet exists in stored opportunities
+        const result = await chrome.storage.local.get('xthreads_batch_opportunities');
+        const storedOpportunities = result.xthreads_batch_opportunities || [];
+        
+        const alreadyProcessed = storedOpportunities.some(op => op.id === tweetId);
+        
+        if (alreadyProcessed) {
+          console.log(`⏭️  Tweet ${tweetId} already processed, skipping`);
+          return true;
+        }
+        
+        return false;
+      } catch (error) {
+        console.error('Failed to check if tweet processed:', error);
+        return false; // If we can't check, allow processing
       }
+    }
+
+    cleanupOldOpportunities() {
+      // Only cleanup when starting a new scan - opportunities persist until manual clear or new scan
+      // This method is kept for backwards compatibility but does nothing now
+      console.log('🧹 Cleanup skipped - opportunities persist until manual clear or new scan');
     }
 
     extractTweetData(tweetElement) {
@@ -457,74 +577,183 @@ if (!window.__xthreads_injected__) {
       }
     }
 
-    shouldReplyToTweet(tweetData, settings) {
+    isGrowthOpportunity(tweetData, settings) {
       // Check if already replied
       if (this.repliedTweets.has(tweetData.id)) return false;
       
-      // Check if tweet is recent (within last hour)
-      const oneHourAgo = Date.now() - (60 * 60 * 1000);
-      if (tweetData.timestamp < oneHourAgo) return false;
+      // Check if tweet is recent (within last 4 hours for better growth potential)
+      const fourHoursAgo = Date.now() - (4 * 60 * 60 * 1000);
+      if (tweetData.timestamp < fourHoursAgo) return false;
       
-      // Check if tweet contains keywords (primary)
       const content = tweetData.content.toLowerCase();
-      const keywords = settings.keywords || [];
-      
-      if (keywords.length > 0) {
-        const hasKeyword = keywords.some(keyword => 
-          content.includes(keyword.toLowerCase())
-        );
-        if (hasKeyword) return true;
-      }
-      
-      // Fallback: Check for general engagement opportunities
-      return this.isGoodReplyOpportunity(tweetData, content);
-    }
-
-    isGoodReplyOpportunity(tweetData, content) {
-      // Skip if too many replies already (indicates high engagement tweet)
       const tweetElement = document.querySelector(`[href*="${tweetData.id}"]`)?.closest('[data-testid="tweet"]');
-      if (tweetElement) {
-        const replyButton = tweetElement.querySelector('[data-testid="reply"]');
-        const replyCount = replyButton?.textContent?.trim();
-        if (replyCount && parseInt(replyCount) > 50) {
-          return false; // Skip tweets with 50+ replies
+      
+      // Growth-focused engagement metrics
+      if (!this.hasGrowthPotential(tweetElement)) return false;
+      
+      // Primary: Check for relevant keyword matching (must be profile-relevant)
+      const keywords = settings.keywords || [];
+      if (keywords.length > 0) {
+        const relevanceScore = this.calculateKeywordRelevance(content, keywords);
+        console.log(`🎯 Tweet relevance score: ${relevanceScore} for: "${tweetData.content.substring(0, 50)}..."`);
+        
+        // Only consider tweets with high relevance (score >= 2)
+        if (relevanceScore >= 2) {
+          console.log(`✅ Tweet is highly relevant to profile keywords`);
+          return true;
+        } else {
+          console.log(`❌ Tweet not relevant enough (score: ${relevanceScore}, need: 2+)`);
+          return false;
         }
       }
       
-      // Look for engagement patterns that suggest good reply opportunities
-      const engagementPatterns = [
-        // Questions
-        /\?$/,
-        /what.*think/i,
-        /anyone.*know/i,
-        /thoughts.*on/i,
+      // If no keywords, fall back to founder/startup patterns only
+      return this.isFounderRelevantContent(content);
+    }
+
+    hasGrowthPotential(tweetElement) {
+      if (!tweetElement) return true; // Default to true if we can't analyze
+      
+      try {
+        // Check engagement metrics for growth potential (5-100 likes range)
+        const likeButton = tweetElement.querySelector('[data-testid="like"]');
+        const retweetButton = tweetElement.querySelector('[data-testid="retweet"]');
+        const replyButton = tweetElement.querySelector('[data-testid="reply"]');
         
-        // Statements seeking validation/discussion
-        /agree.*disagree/i,
-        /unpopular.*opinion/i,
-        /controversial.*take/i,
-        /hot.*take/i,
+        const likeCount = this.extractCount(likeButton?.textContent);
+        const retweetCount = this.extractCount(retweetButton?.textContent);
+        const replyCount = this.extractCount(replyButton?.textContent);
+        
+        // Relaxed growth range: 1-50 likes, not oversaturated with replies
+        const hasGoodEngagement = likeCount >= 1 && likeCount <= 50;
+        const notOversaturated = replyCount < 25; // Less competition
+        
+        console.log(`📊 Tweet engagement: ${likeCount} likes, ${replyCount} replies, ${retweetCount} retweets`);
+        
+        return hasGoodEngagement && notOversaturated;
+        
+      } catch (error) {
+        console.log('Could not analyze engagement metrics, defaulting to true');
+        return true;
+      }
+    }
+    
+    extractCount(text) {
+      if (!text) return 0;
+      const match = text.match(/[\d,]+/);
+      return match ? parseInt(match[0].replace(/,/g, '')) : 0;
+    }
+
+    calculateKeywordRelevance(content, keywords) {
+      let score = 0;
+      const words = content.split(/\s+/);
+      
+      for (const keyword of keywords) {
+        const keywordLower = keyword.toLowerCase();
+        const keywordWords = keywordLower.split(/\s+/);
+        
+        // Exact phrase match (highest score)
+        if (content.includes(keywordLower)) {
+          score += 3;
+          console.log(`📈 +3 points: Exact phrase match for "${keyword}"`);
+        }
+        
+        // Partial word matches within context
+        const matchingWords = keywordWords.filter(kw => 
+          words.some(word => word.includes(kw) && kw.length > 2)
+        );
+        
+        if (matchingWords.length > 0) {
+          const partialScore = matchingWords.length;
+          score += partialScore;
+          console.log(`📈 +${partialScore} points: Partial matches for "${keyword}" (${matchingWords.join(', ')})`);
+        }
+        
+        // Context bonus: keyword appears in meaningful context
+        if (this.isKeywordInContext(content, keywordLower)) {
+          score += 1;
+          console.log(`📈 +1 point: Contextual relevance for "${keyword}"`);
+        }
+      }
+      
+      // Tweet focus bonus: keywords make up significant portion of tweet
+      const keywordDensity = this.calculateKeywordDensity(content, keywords);
+      if (keywordDensity > 0.2) { // 20%+ of tweet is about keywords
+        score += 2;
+        console.log(`📈 +2 points: High keyword density (${Math.round(keywordDensity * 100)}%)`);
+      }
+      
+      return score;
+    }
+    
+    isKeywordInContext(content, keyword) {
+      // Check if keyword appears with relevant context words
+      const contextPatterns = [
+        // Questions/discussions about the topic
+        new RegExp(`(what|how|why|when|where).*${keyword}`, 'i'),
+        new RegExp(`${keyword}.*(think|opinion|thoughts|advice)`, 'i'),
         
         // Experience sharing
-        /in my experience/i,
-        /learned.*lesson/i,
-        /mistake.*made/i,
-        /tip.*trick/i,
+        new RegExp(`(my|our|been).*${keyword}`, 'i'),
+        new RegExp(`${keyword}.*(experience|journey|story)`, 'i'),
         
-        // Common business/tech keywords
-        /startup/i,
-        /entrepreneur/i,
-        /product.*launch/i,
-        /growth.*hack/i,
-        /marketing/i,
-        /saas/i,
-        /build.*public/i,
-        /side.*project/i,
-        /freelanc/i,
-        /remote.*work/i
+        // Problems/solutions
+        new RegExp(`(problem|issue|challenge).*${keyword}`, 'i'),
+        new RegExp(`${keyword}.*(solution|help|tips)`, 'i'),
+        
+        // Learning/sharing
+        new RegExp(`(learned|discovered|found).*${keyword}`, 'i'),
+        new RegExp(`${keyword}.*(lesson|insight|takeaway)`, 'i')
       ];
       
-      return engagementPatterns.some(pattern => pattern.test(content));
+      return contextPatterns.some(pattern => pattern.test(content));
+    }
+    
+    calculateKeywordDensity(content, keywords) {
+      const words = content.split(/\s+/).length;
+      let keywordWordCount = 0;
+      
+      for (const keyword of keywords) {
+        const keywordWords = keyword.toLowerCase().split(/\s+/);
+        keywordWordCount += keywordWords.length;
+      }
+      
+      return words > 0 ? keywordWordCount / words : 0;
+    }
+
+    isFounderRelevantContent(content) {
+      // Only match highly relevant founder/startup content when no keywords provided
+      const founderPatterns = [
+        // Direct founder/startup topics
+        /\b(founder|startup|entrepreneur|indie hacker|bootstrapper|side project)\b/i,
+        /\b(building in public|build in public|solo founder|technical founder)\b/i,
+        /\b(saas|mvp|product launch|first sale|early traction)\b/i,
+        
+        // Founder-specific questions/discussions
+        /\b(founder|startup).*\?(.*)?/i,
+        /(what|how|why).*(founder|startup|build|launch)/i,
+        /(advice|tips|help).*(founder|startup|entrepreneur)/i,
+        
+        // Founder journey/experience sharing
+        /(my|our).*(startup|product|saas|founder).*journey/i,
+        /(learned|mistake|lesson).*(startup|founder|entrepreneur)/i,
+        /(quit|left).*job.*(startup|founder)/i,
+        
+        // Product/business building
+        /\b(shipping|launched|built).*\b(product|saas|app|mvp)\b/i,
+        /\b(first|100|1000).*(user|customer|sale|revenue)\b/i,
+        /\b(growth|traction|metrics|revenue)\b.*\b(startup|saas|product)\b/i
+      ];
+      
+      const hasFounderContent = founderPatterns.some(pattern => pattern.test(content));
+      
+      if (hasFounderContent) {
+        console.log(`✅ Tweet matches founder-relevant patterns`);
+        return true;
+      }
+      
+      console.log(`❌ Tweet not founder-relevant enough`);
+      return false;
     }
 
     showAgenticReplyNotification(tweetData, reply) {
