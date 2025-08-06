@@ -45,6 +45,7 @@ if (!window.__xthreads_popup_injected__) {
       this.updateUI();
       this.updateStats();
       await this.checkForTweetData(); // Check if we should open reply tab
+      await this.checkForRewriteData(); // Check if we should open rewrite tab
       await this.checkForBatchOpportunities(); // Check for batch opportunities
       
       // Update badge with current batch opportunity count
@@ -471,7 +472,13 @@ if (!window.__xthreads_popup_injected__) {
         }
 
         const data = await response.json();
-        const variations = [data.rewrittenContent];
+        // Handle both string and array responses
+        let variations = [];
+        if (Array.isArray(data.rewrittenContent)) {
+          variations = data.rewrittenContent;
+        } else if (data.rewrittenContent) {
+          variations = [data.rewrittenContent];
+        }
         const validatedVariations = variations.map((v) =>
           this.validateAndTruncateContent(v)
         );
@@ -2023,6 +2030,111 @@ if (!window.__xthreads_popup_injected__) {
           toast.remove();
         }
       }, 4000);
+    }
+
+    async checkForRewriteData() {
+      try {
+        const result = await chrome.storage.local.get(['xthreads_rewrite_data', 'xthreads_open_rewrite_tab']);
+        
+        // Check if we should open rewrite tab (from background script flag)
+        let shouldOpenRewriteTab = false;
+        if (result.xthreads_open_rewrite_tab) {
+          const isRecent = (Date.now() - result.xthreads_open_rewrite_tab.timestamp) < 30000;
+          if (isRecent) {
+            shouldOpenRewriteTab = true;
+            // Clear the flag
+            await chrome.storage.local.remove('xthreads_open_rewrite_tab');
+          }
+        }
+        
+        // Check if we have rewrite data
+        if (result.xthreads_rewrite_data) {
+          const rewriteData = result.xthreads_rewrite_data;
+          
+          // Check if rewrite data is recent (within last 5 minutes)
+          const isRecent = (Date.now() - rewriteData.timestamp) < 300000; // 5 minutes
+          
+          if (isRecent) {
+            // Switch to rewrite tab if flagged or if data is very recent
+            const isVeryRecent = (Date.now() - rewriteData.timestamp) < 30000; // 30 seconds
+            if (shouldOpenRewriteTab || isVeryRecent) {
+              this.switchTab('rewrite');
+            }
+            
+            // Load rewrite data
+            this.loadRewriteData(rewriteData);
+          } else {
+            // Clear old rewrite data
+            await chrome.storage.local.remove('xthreads_rewrite_data');
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check for rewrite data:', error);
+      }
+    }
+
+    loadRewriteData(rewriteData) {
+      try {
+        // Fill the rewrite input with original content
+        const rewriteInput = document.getElementById('rewriteInput');
+        if (rewriteInput) {
+          rewriteInput.value = rewriteData.originalContent;
+          this.updateCharCount('rewriteCharCount', rewriteData.originalContent.length);
+        }
+        
+        // Set the tone
+        const rewriteTone = document.getElementById('rewriteTone');
+        if (rewriteTone && rewriteData.tone) {
+          rewriteTone.value = rewriteData.tone;
+        }
+        
+        // Show the results
+        const rewriteResults = document.getElementById('rewriteResults');
+        const rewriteVariations = document.getElementById('rewriteVariations');
+        
+        if (rewriteResults && rewriteVariations) {
+          rewriteVariations.innerHTML = `
+            <div class="result-item">
+              <div class="result-text">${this.escapeHtml(rewriteData.rewrittenContent)}</div>
+              <div class="result-actions">
+                <button class="copy-btn" data-text="${this.escapeHtml(rewriteData.rewrittenContent)}">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                  Copy
+                </button>
+              </div>
+            </div>
+          `;
+          
+          // Bind copy button
+          const copyBtn = rewriteVariations.querySelector('.copy-btn');
+          if (copyBtn) {
+            copyBtn.addEventListener('click', () => {
+              this.copyToClipboard(rewriteData.rewrittenContent);
+            });
+          }
+          
+          rewriteResults.style.display = 'block';
+        }
+        
+        console.log('Loaded rewrite data:', rewriteData);
+      } catch (error) {
+        console.error('Failed to load rewrite data:', error);
+      }
+    }
+
+    updateCharCount(elementId, count) {
+      const element = document.getElementById(elementId);
+      if (element) {
+        element.textContent = count;
+        if (count > 280) {
+          element.style.color = '#ef4444';
+        } else {
+          element.style.color = '#6b7280';
+        }
+      }
     }
   }
 

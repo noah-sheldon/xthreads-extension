@@ -170,6 +170,11 @@ class XThreadsBackground {
           sendResponse({ success: true });
           break;
 
+        case "openPopupToRewriteTab":
+          await this.handleOpenPopupToRewriteTab();
+          sendResponse({ success: true });
+          break;
+
         default:
           sendResponse({ success: false, error: "Unknown action" });
       }
@@ -552,6 +557,30 @@ class XThreadsBackground {
     }
   }
 
+  async handleOpenPopupToRewriteTab() {
+    try {
+      // Set flag to open rewrite tab
+      await chrome.storage.local.set({
+        xthreads_open_rewrite_tab: {
+          timestamp: Date.now()
+        }
+      });
+      
+      // Try to open popup - this may fail in Manifest V3 due to user gesture requirements
+      try {
+        await chrome.action.openPopup();
+        console.log('Successfully opened popup to rewrite tab');
+      } catch (error) {
+        console.log('Could not open popup programmatically:', error.message);
+        // Show a browser notification as fallback
+        await this.showOpenRewritePopupNotification();
+      }
+      
+    } catch (error) {
+      console.error('Failed to open popup to rewrite tab:', error);
+    }
+  }
+
   async showOpenPopupNotification() {
     try {
       await chrome.notifications.create({
@@ -564,6 +593,21 @@ class XThreadsBackground {
       });
     } catch (error) {
       console.error('Failed to show notification:', error);
+    }
+  }
+
+  async showOpenRewritePopupNotification() {
+    try {
+      await chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'assets/icon48.png',
+        title: 'xThreads - Content Rewritten',
+        message: 'Click the xThreads extension icon to see your rewritten content',
+        priority: 1,
+        requireInteraction: true
+      });
+    } catch (error) {
+      console.error('Failed to show rewrite notification:', error);
     }
   }
 
