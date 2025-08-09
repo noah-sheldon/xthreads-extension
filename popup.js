@@ -47,6 +47,7 @@ if (!window.__xthreads_popup_injected__) {
       await this.checkForTweetData(); // Check if we should open reply tab
       await this.checkForRewriteData(); // Check if we should open rewrite tab
       await this.checkForBatchOpportunities(); // Check for batch opportunities
+      await this.checkForActiveOpportunity(); // Check for active opportunity from opened tabs
       
       // Update badge with current batch opportunity count
       this.updateBatchBadge(this.batchOpportunityCount);
@@ -582,6 +583,14 @@ if (!window.__xthreads_popup_injected__) {
       await this.saveSettings();
 
       try {
+        if (isActive) {
+          // Clear old replies when starting agent
+          console.log('🧹 Clearing old replies and starting fresh scan...');
+          await chrome.storage.local.set({ xthreads_batch_opportunities: [] });
+          this.displayBatchOpportunities([]);
+          this.updateBatchBadge(0);
+        }
+        
         // Get current X.com tabs
         const tabs = await chrome.tabs.query({
           url: ["https://x.com/*", "https://twitter.com/*"],
@@ -590,6 +599,7 @@ if (!window.__xthreads_popup_injected__) {
         const message = {
           action: isActive ? "startAgent" : "stopAgent",
           settings: this.settings,
+          manualStop: !isActive // Flag to indicate this was a manual turn-off
         };
 
         // Send message to all X.com tabs
@@ -602,10 +612,13 @@ if (!window.__xthreads_popup_injected__) {
         }
 
         this.updateAgentUI();
-        this.showToast(
-          isActive ? "Agent activated" : "Agent deactivated",
-          "success"
-        );
+        
+        if (isActive) {
+          this.showToast("Agent started - scanning for opportunities...", "success");
+        } else {
+          // Don't show toast for manual turn-off - agent will handle completion message
+          console.log('🛑 Manual agent turn-off initiated');
+        }
       } catch (error) {
         console.error("Failed to toggle agent:", error);
         this.showToast("Failed to toggle agent", "error");
@@ -1271,8 +1284,33 @@ if (!window.__xthreads_popup_injected__) {
         
         console.log(`📱 Popup checking opportunities: found ${opportunities.length}`, opportunities);
         
-        // Always display opportunities UI
-        this.displayBatchOpportunities(opportunities);
+        // Check if agent is still active (scanning)
+        const isAgentActive = this.settings.isActive;
+        
+        // Check how many replies are still being generated (exclude "No reply" as that's complete)
+        const generatingCount = opportunities.filter(
+          opp => !opp.reply || opp.reply === null || opp.reply === 'Reply being generated...' || opp.reply === 'Generating...'
+        ).length;
+        
+        // Only show loading if agent is active OR if we have opportunities but some replies are still generating
+        if (isAgentActive || (opportunities.length > 0 && generatingCount > 0)) {
+          // Show loading state instead of opportunities while scanning/generating
+          this.showScanningState(opportunities.length, generatingCount, isAgentActive);
+          
+          // Auto-refresh to check for completion
+          setTimeout(() => {
+            this.checkForBatchOpportunities();
+          }, 2000);
+        } else if (opportunities.length > 0) {
+          // Agent stopped and all replies ready - show opportunities
+          this.displayBatchOpportunities(opportunities);
+          
+          // Show final toast notification if we haven't shown it yet
+          this.showFinalToastIfReady(opportunities);
+        } else {
+          // No opportunities - show empty state
+          this.displayBatchOpportunities([]);
+        }
         
         // Store the count for badge updates
         this.batchOpportunityCount = opportunities.length;
@@ -1281,6 +1319,35 @@ if (!window.__xthreads_popup_injected__) {
       } catch (error) {
         console.error('Failed to check for batch opportunities:', error);
         return [];
+      }
+    }
+    
+    async showFinalToastIfReady(opportunities) {
+      try {
+        // Check if we've already shown the final toast for this batch
+        const result = await chrome.storage.local.get('xthreads_final_toast_shown');
+        const lastToastTime = result.xthreads_final_toast_shown || 0;
+        
+        // Only show toast once per batch (within 30 seconds)
+        const shouldShowToast = (Date.now() - lastToastTime) > 30000;
+        
+        if (shouldShowToast && opportunities.length > 0) {
+          // Check that all opportunities have replies (including "No reply")
+          const readyCount = opportunities.filter(opp => opp.reply && 
+            opp.reply !== null &&
+            opp.reply !== 'Generating...' && 
+            opp.reply !== 'Reply being generated...').length;
+          
+          if (readyCount === opportunities.length) {
+            this.showToast(`${opportunities.length} opportunities ready with AI replies!`, 'success');
+            // Mark toast as shown
+            await chrome.storage.local.set({
+              xthreads_final_toast_shown: Date.now()
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to show final toast:', error);
       }
     }
 
@@ -1374,6 +1441,41 @@ if (!window.__xthreads_popup_injected__) {
       }
     }
 
+    showScanningState(foundCount, generatingCount, isAgentActive) {
+      const batchOpportunities = document.getElementById('batchOpportunities');
+      const replySection = document.getElementById('replySection');
+      const opportunitiesList = document.getElementById('opportunitiesList');
+      const batchTitle = document.getElementById('batchTitle');
+      
+      // Show batch section, hide reply section
+      if (batchOpportunities) batchOpportunities.style.display = 'block';
+      if (replySection) replySection.style.display = 'none';
+      
+      // Update title with scanning status
+      if (batchTitle) {
+        if (isAgentActive) {
+          batchTitle.textContent = `Scanning for opportunities... (${foundCount} found)`;
+        } else {
+          batchTitle.textContent = `Generating replies... (${generatingCount} remaining)`;
+        }
+      }
+      
+      // Show loading state in opportunities list
+      if (opportunitiesList) {
+        const statusMessage = isAgentActive ? 
+          'Scanning X.com for growth opportunities...' :
+          `Generating AI replies for ${foundCount} opportunities...`;
+        
+        opportunitiesList.innerHTML = `
+          <div class="scanning-state">
+            <div class="spinner"></div>
+            <p>${statusMessage}</p>
+            ${foundCount > 0 ? `<small>${foundCount} opportunities found, please wait...</small>` : ''}
+          </div>
+        `;
+      }
+    }
+    
     displayBatchOpportunities(opportunities) {
       console.log(`🎯 Displaying ${opportunities.length} opportunities in popup`);
       
@@ -1382,13 +1484,6 @@ if (!window.__xthreads_popup_injected__) {
       const batchTitle = document.getElementById('batchTitle');
       const opportunitiesList = document.getElementById('opportunitiesList');
       
-      console.log('🔍 DOM elements found:', {
-        batchOpportunities: !!batchOpportunities,
-        replySection: !!replySection,
-        batchTitle: !!batchTitle,
-        opportunitiesList: !!opportunitiesList
-      });
-      
       if (!opportunities || opportunities.length === 0) {
         console.log('📭 No opportunities to display, showing empty state');
         if (batchOpportunities) batchOpportunities.style.display = 'none';
@@ -1396,15 +1491,14 @@ if (!window.__xthreads_popup_injected__) {
         return;
       }
       
-      console.log('📊 Showing batch opportunities UI');
+      console.log('📊 Showing batch opportunities UI with ready replies');
       // Show batch opportunities, hide single reply section
       if (batchOpportunities) batchOpportunities.style.display = 'block';
       if (replySection) replySection.style.display = 'none';
       
       // Update title
       if (batchTitle) {
-        batchTitle.textContent = `Reply Opportunities (${opportunities.length})`;
-        console.log(`📝 Updated title to: Reply Opportunities (${opportunities.length})`);
+        batchTitle.textContent = `Reply Opportunities (${opportunities.length}) - Ready!`;
       }
       
       // Clear and populate list
@@ -1428,34 +1522,59 @@ if (!window.__xthreads_popup_injected__) {
       const author = this.extractAuthorFromUrl(opportunity.url) || 'Unknown';
       const timeAgo = this.formatTime(opportunity.timestamp || Date.now());
       
+      // Check if reply is still being generated
+      const isGenerating = !opportunity.reply || 
+        opportunity.reply === null ||
+        opportunity.reply === 'Reply being generated...' || 
+        opportunity.reply === 'Generating...';
+      
+      const isNoReply = opportunity.reply === 'No reply';
+      const isDisabled = isGenerating || isNoReply;
+      
+      let replyText, replyClass;
+      if (isGenerating) {
+        replyText = 'Generating reply...';
+        replyClass = 'generating';
+      } else if (isNoReply) {
+        replyText = 'No reply available';
+        replyClass = 'no-reply';
+      } else {
+        replyText = opportunity.reply;
+        replyClass = '';
+      }
+      
+      // Show viral indicator if available
+      const viralIndicator = opportunity.isViral ? 
+        `<span class="viral-indicator" title="High viral potential (weight: ${opportunity.weight?.toFixed(2) || 'N/A'})">🔥</span>` : '';
+      
       item.innerHTML = `
         <div class="opportunity-header">
-          <input type="checkbox" class="opportunity-checkbox" data-index="${index}">
+          <input type="checkbox" class="opportunity-checkbox" data-index="${index}" ${isDisabled ? 'disabled' : ''}>
           <div class="opportunity-meta">
-            <div class="opportunity-author">@${author}</div>
+            <div class="opportunity-author">@${author} ${viralIndicator}</div>
             <div class="opportunity-time">${timeAgo}</div>
           </div>
         </div>
         <div class="opportunity-content">${opportunity.content}</div>
         <div class="opportunity-reply">
           <div class="opportunity-reply-label">Generated Reply:</div>
-          <div class="opportunity-reply-text">${opportunity.reply || 'Generating...'}</div>
+          <div class="opportunity-reply-text ${replyClass}">${replyText}</div>
         </div>
         <div class="opportunity-actions">
-          <button class="opportunity-btn open" data-url="${opportunity.url}" title="Open Tweet in Background">
+          <button class="opportunity-btn open" data-url="${opportunity.url}" title="Open Tweet" ${isNoReply ? 'disabled' : ''}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
               <polyline points="15,3 21,3 21,9"/>
               <line x1="10" y1="14" x2="21" y2="3"/>
             </svg>
           </button>
-          <button class="opportunity-btn copy" data-reply="${this.escapeHtml(opportunity.reply || '')}" title="Copy Reply">
+          <button class="opportunity-btn copy" data-reply="${this.escapeHtml(opportunity.reply || '')}" title="Copy Reply" ${isDisabled ? 'disabled' : ''}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
             </svg>
           </button>
-          <button class="opportunity-btn edit" data-index="${index}" title="Edit Reply">
+          <button class="opportunity-btn edit" data-index="${index}" title="Edit Reply" ${isDisabled ? 'disabled' : ''}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -1489,13 +1608,35 @@ if (!window.__xthreads_popup_injected__) {
       // Open tweet button
       const openBtn = item.querySelector('.opportunity-btn.open');
       if (openBtn) {
-        openBtn.addEventListener('click', (e) => {
+        openBtn.addEventListener('click', async (e) => {
           e.preventDefault();
           e.stopPropagation();
           const url = openBtn.dataset.url;
+          console.log('🔗 Opening tweet in new tab:', url);
+          
           if (url) {
-            // Open in background tab to keep popup open
-            chrome.tabs.create({ url, active: false });
+            try {
+              // Open in new tab (active so user can interact)
+              const tab = await chrome.tabs.create({ url, active: true });
+              console.log('✅ Successfully opened tab:', tab.id);
+              this.showToast('Tweet opened - next opportunity ready', 'success');
+              
+              // Auto-progress to next opportunity after opening
+              await this.processAndRemoveOpportunity(parseInt(item.dataset.index), 'opened');
+            } catch (error) {
+              console.error('❌ Failed to open tweet in new tab:', error);
+              this.showToast('Failed to open tweet', 'error');
+              
+              // Fallback: try to open in current tab
+              try {
+                window.open(url, '_blank');
+              } catch (fallbackError) {
+                console.error('❌ Fallback also failed:', fallbackError);
+              }
+            }
+          } else {
+            console.error('❌ No URL found for tweet');
+            this.showToast('Invalid tweet URL', 'error');
           }
         });
       }
@@ -1503,12 +1644,16 @@ if (!window.__xthreads_popup_injected__) {
       // Copy reply button
       const copyBtn = item.querySelector('.opportunity-btn.copy');
       if (copyBtn) {
-        copyBtn.addEventListener('click', (e) => {
+        copyBtn.addEventListener('click', async (e) => {
           e.preventDefault();
           e.stopPropagation();
           const reply = copyBtn.dataset.reply;
-          if (reply) {
-            this.copyToClipboard(reply);
+          if (reply && reply !== 'Generating...') {
+            await this.copyToClipboard(reply);
+            // Auto-progress to next opportunity after copy
+            await this.processAndRemoveOpportunity(parseInt(item.dataset.index), 'copied');
+          } else {
+            this.showToast('Reply not yet generated', 'error');
           }
         });
       }
@@ -1606,23 +1751,99 @@ if (!window.__xthreads_popup_injected__) {
     }
 
     async skipOpportunity(index) {
-      const item = document.querySelector(`[data-index="${index}"]`);
-      if (item) {
-        item.remove();
+      await this.processAndRemoveOpportunity(parseInt(index), 'skipped');
+    }
+    
+    async processAndRemoveOpportunity(index, action) {
+      console.log(`🔄 Processing opportunity ${index} - action: ${action}`);
+      
+      try {
+        const result = await chrome.storage.local.get('xthreads_batch_opportunities');
+        const opportunities = result.xthreads_batch_opportunities || [];
         
-        // Update stored opportunities
-        try {
-          const result = await chrome.storage.local.get('xthreads_batch_opportunities');
-          const opportunities = result.xthreads_batch_opportunities || [];
-          opportunities.splice(parseInt(index), 1);
-          await chrome.storage.local.set({ xthreads_batch_opportunities: opportunities });
-          
-          // Update badge and display
-          this.updateBatchBadge(opportunities.length);
-          this.displayBatchOpportunities(opportunities);
-        } catch (error) {
-          console.error('Failed to skip opportunity:', error);
+        if (index < 0 || index >= opportunities.length) {
+          console.error('Invalid opportunity index:', index);
+          return;
         }
+        
+        const processedOpportunity = opportunities[index];
+        console.log(`📝 Removing opportunity: ${processedOpportunity.content.substring(0, 50)}...`);
+        
+        // Remove the processed opportunity from storage
+        opportunities.splice(index, 1);
+        await chrome.storage.local.set({ xthreads_batch_opportunities: opportunities });
+        
+        // Update UI immediately
+        this.displayBatchOpportunities(opportunities);
+        this.updateBatchBadge(opportunities.length);
+        
+        // Show appropriate message based on remaining opportunities
+        if (opportunities.length === 0) {
+          this.showToast('All opportunities processed! Agent scan complete.', 'success');
+        } else {
+          const actionMessage = {
+            'copied': `Reply copied! ${opportunities.length} opportunities remaining`,
+            'opened': `Tweet opened! ${opportunities.length} opportunities remaining`,
+            'skipped': `Opportunity skipped! ${opportunities.length} opportunities remaining`
+          };
+          
+          this.showToast(actionMessage[action] || `Processed! ${opportunities.length} remaining`, 'info');
+        }
+        
+        // Auto-highlight the next opportunity (now at the same index since we removed current one)
+        if (opportunities.length > 0) {
+          setTimeout(() => {
+            const nextIndex = Math.min(index, opportunities.length - 1);
+            this.highlightOpportunity(nextIndex);
+          }, 500);
+        }
+        
+      } catch (error) {
+        console.error('Failed to process opportunity:', error);
+        this.showToast('Failed to process opportunity', 'error');
+      }
+    }
+    
+    highlightOpportunity(index) {
+      try {
+        const item = document.querySelector(`[data-index="${index}"]`);
+        if (item) {
+          // Add highlight class
+          item.classList.add('next-opportunity');
+          
+          // Scroll into view smoothly
+          item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          
+          // Remove highlight after 2 seconds
+          setTimeout(() => {
+            item.classList.remove('next-opportunity');
+          }, 2000);
+          
+          console.log(`✨ Highlighted next opportunity at index ${index}`);
+        }
+      } catch (error) {
+        console.error('Failed to highlight opportunity:', error);
+      }
+    }
+
+    async storeActiveOpportunity(index) {
+      try {
+        const result = await chrome.storage.local.get('xthreads_batch_opportunities');
+        const opportunities = result.xthreads_batch_opportunities || [];
+        
+        if (opportunities[index]) {
+          // Store the selected opportunity for persistence across tab switches
+          await chrome.storage.local.set({
+            xthreads_active_opportunity: {
+              ...opportunities[index],
+              index: index,
+              timestamp: Date.now()
+            }
+          });
+          console.log('Stored active opportunity for persistence:', opportunities[index]);
+        }
+      } catch (error) {
+        console.error('Failed to store active opportunity:', error);
       }
     }
 
@@ -2073,6 +2294,54 @@ if (!window.__xthreads_popup_injected__) {
       }
     }
 
+    async checkForActiveOpportunity() {
+      try {
+        const result = await chrome.storage.local.get('xthreads_active_opportunity');
+        if (result.xthreads_active_opportunity) {
+          const activeOpportunity = result.xthreads_active_opportunity;
+          
+          // Check if the stored opportunity is recent (within last 5 minutes)
+          const isRecent = (Date.now() - activeOpportunity.timestamp) < 300000; // 5 minutes
+          
+          if (isRecent) {
+            // Ensure we're on the reply tab
+            this.switchTab('reply');
+            
+            // Highlight the active opportunity in the list
+            this.highlightActiveOpportunity(activeOpportunity.index);
+            
+            console.log('Restored active opportunity from tab navigation:', activeOpportunity);
+          } else {
+            // Clean up old active opportunity data
+            await chrome.storage.local.remove('xthreads_active_opportunity');
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check for active opportunity:', error);
+      }
+    }
+
+    highlightActiveOpportunity(index) {
+      try {
+        // Find the opportunity item and highlight it
+        const item = document.querySelector(`[data-index="${index}"]`);
+        if (item) {
+          // Add highlight class
+          item.classList.add('active-opportunity');
+          
+          // Scroll into view
+          item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          
+          // Remove highlight after 3 seconds
+          setTimeout(() => {
+            item.classList.remove('active-opportunity');
+          }, 3000);
+        }
+      } catch (error) {
+        console.error('Failed to highlight active opportunity:', error);
+      }
+    }
+
     loadRewriteData(rewriteData) {
       try {
         // Fill the rewrite input with original content
@@ -2144,7 +2413,7 @@ if (!window.__xthreads_popup_injected__) {
   });
 
   // Listen for messages from content script
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message) => {
     if (message.action === "updateStats") {
       // Handle stats updates if needed
     } else if (message.action === "agentStopped") {

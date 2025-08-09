@@ -318,7 +318,7 @@ class XThreadsBackground {
 
   async performAgenticCheck(settings) {
     try {
-      console.log("Performing agentic check...");
+      console.log("Performing agentic check on current pages...");
 
       // Get X.com tabs
       const tabs = await chrome.tabs.query({
@@ -330,37 +330,17 @@ class XThreadsBackground {
         return;
       }
 
-      // Use the first X.com tab found
-      const targetTab = tabs[0];
-
-      // Construct search query from keywords with language and engagement filters
-      const keywordQuery = settings.keywords
-        .map(keyword => `"${keyword}"`)
-        .join(' OR ');
-      
-      const searchQuery = `(${keywordQuery}) min_faves:10 lang:en`;
-
-      const searchUrl = `https://x.com/search?q=${encodeURIComponent(searchQuery)}&src=typed_query&f=live`;
-
-      console.log("Navigating to search:", searchUrl);
-
-      // Navigate to search results
-      await chrome.tabs.update(targetTab.id, { 
-        url: searchUrl,
-        active: false // Don't focus the tab
-      });
-
-      // Wait for page to load, then trigger content script analysis
-      setTimeout(async () => {
+      // Scan all open X.com tabs on their current pages (no navigation)
+      for (const tab of tabs) {
         try {
-          await chrome.tabs.sendMessage(targetTab.id, {
+          await chrome.tabs.sendMessage(tab.id, {
             action: 'scanForAgenticReplies',
             settings: settings
           });
         } catch (error) {
-          console.log("Could not send scan message to tab:", error);
+          console.log(`Could not send scan message to tab ${tab.id}:`, error);
         }
-      }, 3000); // Wait 3 seconds for page load
+      }
 
     } catch (error) {
       console.error("Agentic check failed:", error);
@@ -369,21 +349,27 @@ class XThreadsBackground {
 
   async handleAgenticReplyRequest(tweetData, tabId) {
     try {
+      console.log(`🔄 Background: Processing reply request for tweet ${tweetData.id}`);
+      
       const settings = await this.getSettings();
       
       if (!settings.apiKey || !settings.selectedBrandId) {
-        console.error("Missing API key or brand space for agentic reply");
+        console.error("❌ Background: Missing API key or brand space for agentic reply");
         return;
       }
+
+      console.log(`✅ Background: Settings OK - API key and brand ID present`);
 
       // Check if we've already replied to this tweet
       const repliedTweets = await chrome.storage.local.get("xthreads_replied_tweets");
       const repliedList = repliedTweets.xthreads_replied_tweets || [];
       
       if (repliedList.some(tweet => tweet.id === tweetData.id)) {
-        console.log("Already replied to tweet:", tweetData.id);
+        console.log(`⏭️ Background: Already replied to tweet ${tweetData.id}, skipping`);
         return;
       }
+
+      console.log(`🌐 Background: Making API call for tweet ${tweetData.id}...`);
 
       // Generate reply using new API endpoint
       const response = await fetch('https://www.xthreads.app/api/ai-reply', {
@@ -412,25 +398,67 @@ class XThreadsBackground {
       }
 
       if (reply) {
-        // Send reply to content script for user review
-        await chrome.tabs.sendMessage(tabId, {
-          action: 'showAgenticReplyNotification',
-          tweetData: tweetData,
-          reply: reply
-        });
-
-        // Mark tweet as processed
-        await this.markTweetAsReplied(tweetData.id);
+        console.log(`💾 Background: Storing reply for tweet ${tweetData.id}: "${reply.substring(0, 50)}..."`);
+        
+        // Store reply with the opportunity for popup display
+        await this.storeGeneratedReply(tweetData.id, reply);
         
         // Update stats
         await this.updateStats({ totalAttempts: 1 });
         
-        console.log("Agentic reply generated for tweet:", tweetData.id);
+        console.log(`✅ Background: Reply successfully generated and stored for tweet ${tweetData.id}`);
+      } else {
+        console.error(`❌ Background: No reply generated for tweet ${tweetData.id}, storing "No reply"`);
+        
+        // Store "No reply" instead of leaving as null
+        await this.storeGeneratedReply(tweetData.id, "No reply");
+        
+        await this.updateStats({ totalAttempts: 1 });
       }
 
     } catch (error) {
-      console.error("Failed to handle agentic reply request:", error);
+      console.error(`❌ Background: Failed to handle agentic reply request for tweet ${tweetData.id}:`, error);
+      
+      // Store "No reply" for failed cases instead of leaving as null
+      await this.storeGeneratedReply(tweetData.id, "No reply");
+      
       await this.updateStats({ totalAttempts: 1 }); // Count as failed attempt
+    }
+  }
+
+  async storeGeneratedReply(tweetId, reply) {
+    try {
+      console.log(`💾 Background: Starting to store reply for tweet ${tweetId}`);
+      
+      // Get existing opportunities from correct storage key
+      const result = await chrome.storage.local.get("xthreads_batch_opportunities");
+      const opportunities = result.xthreads_batch_opportunities || [];
+      
+      console.log(`📋 Background: Found ${opportunities.length} existing opportunities in storage`);
+      
+      // Find and update the opportunity with the generated reply
+      let foundOpportunity = false;
+      const updatedOpportunities = opportunities.map(opp => {
+        if (opp.id === tweetId) {
+          foundOpportunity = true;
+          console.log(`✅ Background: Found matching opportunity for tweet ${tweetId}, updating with reply`);
+          return { ...opp, reply: reply, replyGenerated: true };
+        }
+        return opp;
+      });
+      
+      if (!foundOpportunity) {
+        console.error(`❌ Background: No opportunity found for tweet ${tweetId} in storage! Available IDs:`, opportunities.map(o => o.id));
+        return;
+      }
+      
+      await chrome.storage.local.set({
+        xthreads_batch_opportunities: updatedOpportunities
+      });
+      
+      console.log(`✅ Background: Reply successfully stored for tweet ${tweetId} in batch opportunities`);
+    } catch (error) {
+      console.error("❌ Background: Failed to store generated reply:", error);
     }
   }
 

@@ -10,7 +10,6 @@
     "scripting",
     "storage",
     "tabs",
-    "declarativeContent",
     "notifications"
   ],
   "host_permissions": [
