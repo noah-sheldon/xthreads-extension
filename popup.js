@@ -1547,6 +1547,9 @@ if (!window.__xthreads_popup_injected__) {
       const viralIndicator = opportunity.isViral ? 
         `<span class="viral-indicator" title="High viral potential (weight: ${opportunity.weight?.toFixed(2) || 'N/A'})">🔥</span>` : '';
       
+      // Clean the URL - remove /analytics if present and ensure it's the correct tweet URL
+      const cleanUrl = opportunity.url.replace('/analytics', '').replace('/status/', '/status/');
+      
       item.innerHTML = `
         <div class="opportunity-header">
           <input type="checkbox" class="opportunity-checkbox" data-index="${index}" ${isDisabled ? 'disabled' : ''}>
@@ -1561,18 +1564,14 @@ if (!window.__xthreads_popup_injected__) {
           <div class="opportunity-reply-text ${replyClass}">${replyText}</div>
         </div>
         <div class="opportunity-actions">
-          <button class="opportunity-btn open" data-url="${opportunity.url}" title="Open Tweet" ${isNoReply ? 'disabled' : ''}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-              <polyline points="15,3 21,3 21,9"/>
-              <line x1="10" y1="14" x2="21" y2="3"/>
-            </svg>
-          </button>
-          <button class="opportunity-btn copy" data-reply="${this.escapeHtml(opportunity.reply || '')}" title="Copy Reply" ${isDisabled ? 'disabled' : ''}>
+          <button class="opportunity-btn copy-and-open" data-reply="${this.escapeHtml(opportunity.reply || '')}" data-url="${cleanUrl}" title="Copy Reply & Open Tweet" ${isDisabled ? 'disabled' : ''}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <line x1="10" y1="14" x2="21" y2="3"/>
             </svg>
+            Copy & Open
           </button>
           <button class="opportunity-btn edit" data-index="${index}" title="Edit Reply" ${isDisabled ? 'disabled' : ''}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1605,55 +1604,41 @@ if (!window.__xthreads_popup_injected__) {
         });
       }
       
-      // Open tweet button
-      const openBtn = item.querySelector('.opportunity-btn.open');
-      if (openBtn) {
-        openBtn.addEventListener('click', async (e) => {
+      // Combined copy and open button
+      const copyOpenBtn = item.querySelector('.opportunity-btn.copy-and-open');
+      if (copyOpenBtn) {
+        copyOpenBtn.addEventListener('click', async (e) => {
           e.preventDefault();
           e.stopPropagation();
-          const url = openBtn.dataset.url;
-          console.log('🔗 Opening tweet in new tab:', url);
+          const reply = copyOpenBtn.dataset.reply;
+          const url = copyOpenBtn.dataset.url;
           
-          if (url) {
+          console.log('🔄 Copy & Open action - Reply:', reply?.substring(0, 30), 'URL:', url);
+          
+          if (reply && reply !== 'Generating...' && reply !== 'No reply') {
             try {
-              // Open in new tab (active so user can interact)
-              const tab = await chrome.tabs.create({ url, active: true });
-              console.log('✅ Successfully opened tab:', tab.id);
-              this.showToast('Tweet opened - next opportunity ready', 'success');
+              // 1. Copy reply to clipboard
+              await this.copyToClipboard(reply);
+              console.log('✅ Reply copied to clipboard');
               
-              // Auto-progress to next opportunity after opening
-              await this.processAndRemoveOpportunity(parseInt(item.dataset.index), 'opened');
-            } catch (error) {
-              console.error('❌ Failed to open tweet in new tab:', error);
-              this.showToast('Failed to open tweet', 'error');
-              
-              // Fallback: try to open in current tab
-              try {
-                window.open(url, '_blank');
-              } catch (fallbackError) {
-                console.error('❌ Fallback also failed:', fallbackError);
+              // 2. Open tweet in new tab
+              if (url) {
+                const tab = await chrome.tabs.create({ url, active: true });
+                console.log('✅ Tweet opened in new tab:', tab.id);
+                this.showToast('Reply copied & tweet opened!', 'success');
+              } else {
+                this.showToast('Reply copied (invalid URL)', 'warning');
               }
+              
+              // 3. Auto-progress to next opportunity
+              await this.processAndRemoveOpportunity(parseInt(item.dataset.index), 'copied-and-opened');
+              
+            } catch (error) {
+              console.error('❌ Failed copy & open action:', error);
+              this.showToast('Failed to copy & open', 'error');
             }
           } else {
-            console.error('❌ No URL found for tweet');
-            this.showToast('Invalid tweet URL', 'error');
-          }
-        });
-      }
-      
-      // Copy reply button
-      const copyBtn = item.querySelector('.opportunity-btn.copy');
-      if (copyBtn) {
-        copyBtn.addEventListener('click', async (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const reply = copyBtn.dataset.reply;
-          if (reply && reply !== 'Generating...') {
-            await this.copyToClipboard(reply);
-            // Auto-progress to next opportunity after copy
-            await this.processAndRemoveOpportunity(parseInt(item.dataset.index), 'copied');
-          } else {
-            this.showToast('Reply not yet generated', 'error');
+            this.showToast('No reply available to copy', 'error');
           }
         });
       }
@@ -1784,6 +1769,7 @@ if (!window.__xthreads_popup_injected__) {
           const actionMessage = {
             'copied': `Reply copied! ${opportunities.length} opportunities remaining`,
             'opened': `Tweet opened! ${opportunities.length} opportunities remaining`,
+            'copied-and-opened': `Reply copied & tweet opened! ${opportunities.length} opportunities remaining`,
             'skipped': `Opportunity skipped! ${opportunities.length} opportunities remaining`
           };
           

@@ -1070,6 +1070,28 @@ input:checked + .slider:before {
   color: #ffffff;
 }
 
+.opportunity-btn.copy-and-open {
+  color: #00bcd4;
+  border-color: #00bcd4;
+  width: auto;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.opportunity-btn.copy-and-open:hover {
+  background: #00bcd4;
+  color: #ffffff;
+}
+
+.opportunity-btn.copy-and-open svg {
+  width: 14px;
+  height: 14px;
+}
+
 .opportunity-btn.edit {
   color: #00bcd4;
   border-color: #00bcd4;

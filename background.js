@@ -371,25 +371,61 @@ class XThreadsBackground {
 
       console.log(`🌐 Background: Making API call for tweet ${tweetData.id}...`);
 
+      // Prepare API request payload
+      const payload = {
+        parentTweetContent: tweetData.content,
+        brandId: settings.selectedBrandId,
+        tone: settings.tone
+      };
+      
+      console.log(`📤 Background: API Request for tweet ${tweetData.id}:`, {
+        url: 'https://www.xthreads.app/api/ai-reply',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': settings.apiKey ? `${settings.apiKey.substring(0, 10)}...` : 'MISSING'
+        },
+        payload: payload
+      });
+
       // Generate reply using new API endpoint
+      const startTime = Date.now();
       const response = await fetch('https://www.xthreads.app/api/ai-reply', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': settings.apiKey
         },
-        body: JSON.stringify({
-          parentTweetContent: tweetData.content,
-          brandId: settings.selectedBrandId,
-          tone: settings.tone
-        })
+        body: JSON.stringify(payload)
+      });
+      
+      const responseTime = Date.now() - startTime;
+      console.log(`📥 Background: API Response for tweet ${tweetData.id} (${responseTime}ms):`, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries())
       });
 
       if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
+        const errorText = await response.text();
+        console.error(`❌ Background: API Error Response for tweet ${tweetData.id}:`, errorText);
+        throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
-      const data = await response.json();
+      const rawResponseText = await response.text();
+      console.log(`📄 Background: Raw API Response for tweet ${tweetData.id}:`, rawResponseText);
+      
+      let data;
+      try {
+        data = JSON.parse(rawResponseText);
+      } catch (parseError) {
+        console.error(`❌ Background: Failed to parse JSON response for tweet ${tweetData.id}:`, parseError);
+        console.error(`Raw response was:`, rawResponseText);
+        throw new Error(`Invalid JSON response: ${parseError.message}`);
+      }
+      
+      console.log(`📊 Background: Parsed API Response for tweet ${tweetData.id}:`, data);
+      
       let reply = data.reply || data.content;
       
       // Validate and truncate reply
