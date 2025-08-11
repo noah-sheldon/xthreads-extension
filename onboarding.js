@@ -190,7 +190,7 @@ class XThreadsOnboarding {
             this.settings.selectedBrandId = "";
           }
         }
-        await chrome.storage.local.set({ settings: this.settings });
+        await chrome.storage.local.set({ xthreads_settings: this.settings });
       } else {
         const errorData = await response.json();
         throw new Error(

@@ -20,7 +20,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "xThreads Agent"
+    "default_title": "xThreads AI Assistant"
   },
   "icons": {
     "16": "assets/icon16.png",

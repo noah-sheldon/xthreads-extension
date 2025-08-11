@@ -49,8 +49,7 @@ if (!window.__xthreads_popup_injected__) {
       await this.checkForBatchOpportunities(); // Check for batch opportunities
       await this.checkForActiveOpportunity(); // Check for active opportunity from opened tabs
       
-      // Update badge with current batch opportunity count
-      this.updateBatchBadge(this.batchOpportunityCount);
+      // Badge functionality removed
     }
 
     async loadSettings() {
@@ -102,10 +101,15 @@ if (!window.__xthreads_popup_injected__) {
           this.updateBrandSpaceSelectors();
         } else {
           console.error("Failed to load brand spaces:", response.status);
+          this.brandSpaces = [];
+          this.updateBrandSpaceSelectors();
           this.showToast(`Failed to load brand spaces: ${response.status}`, "error");
         }
       } catch (error) {
         console.error("Failed to load brand spaces:", error);
+        this.brandSpaces = [];
+        this.updateBrandSpaceSelectors();
+        this.showToast("Failed to load brand spaces. Please check your connection.", "error");
       }
     }
 
@@ -117,8 +121,10 @@ if (!window.__xthreads_popup_injected__) {
         console.log("Current selectedBrandId:", this.settings.selectedBrandId);
 
         if (this.brandSpaces.length === 0) {
-          select.innerHTML = '<option value="">No brand spaces found</option>';
+          select.innerHTML = '<option value="">No brand spaces available</option>';
+          select.disabled = true;
         } else {
+          select.disabled = false;
           select.innerHTML = '<option value="">Select brand space</option>';
           this.brandSpaces.forEach((brand) => {
             const option = document.createElement("option");
@@ -143,31 +149,48 @@ if (!window.__xthreads_popup_injected__) {
     }
 
     bindEvents() {
-      // Tab navigation
-      document.querySelectorAll(".tab-btn").forEach((btn) => {
-        btn.addEventListener("click", (e) => {
-          this.switchTab(e.target.closest(".tab-btn").dataset.tab);
+      // Action dropdown navigation
+      const actionSelect = document.getElementById('actionSelect');
+      if (actionSelect) {
+        actionSelect.addEventListener('change', (e) => {
+          this.switchTab(e.target.value);
         });
-      });
+      }
 
-      // Header buttons
-      document.getElementById("batchBtn").addEventListener("click", () => {
-        this.openBatchOpportunities();
-      });
-
+      // Header buttons  
       document.getElementById("historyBtn").addEventListener("click", () => {
         this.openHistoryModal();
       });
 
-      document.getElementById("settingsBtn").addEventListener("click", () => {
-        this.openSettings();
+      document.getElementById("settingsBtn").addEventListener("click", async () => {
+        await this.openSettings();
       });
 
       document.getElementById("closeSettings").addEventListener("click", () => {
         this.closeSettings();
       });
 
-      // Bind tab-specific events
+      // History modal events
+      document.getElementById("closeHistory").addEventListener("click", () => {
+        this.closeHistoryModal();
+      });
+
+      // History tab switching
+      document.querySelectorAll('.history-tab').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+          this.switchHistoryTab(e.target.dataset.type);
+        });
+      });
+
+      // Clear history button
+      document.getElementById('clearHistoryBtn').addEventListener('click', () => {
+        this.clearAllHistory();
+      });
+
+      // New unified input system
+      this.bindUnifiedInput();
+      
+      // Bind legacy events for backward compatibility
       this.bindGenerateEvents();
       this.bindRewriteEvents();
       this.bindThreadEvents();
@@ -175,6 +198,186 @@ if (!window.__xthreads_popup_injected__) {
       this.bindBatchEvents();
       this.bindAgentEvents();
       this.bindSettingsEvents();
+    }
+
+    bindUnifiedInput() {
+      const input = document.getElementById("contentInput");
+      const sendBtn = document.getElementById("sendBtn");
+      const toneSelect = document.getElementById("toneSelect");
+      const charCountContainer = document.getElementById("charCountContainer");
+      const charCount = document.getElementById("charCount");
+
+      // Auto-resize textarea
+      input.addEventListener("input", (e) => {
+        const target = e.target;
+        target.style.height = 'auto';
+        target.style.height = Math.min(target.scrollHeight, 120) + 'px';
+        
+        // Update char count for rewrite mode
+        if (this.currentTab === 'rewrite') {
+          const length = target.value.length;
+          charCount.textContent = length;
+          if (length > 280) {
+            charCount.style.color = 'var(--destructive)';
+            charCountContainer.style.display = 'block';
+          } else if (length > 0) {
+            charCount.style.color = 'var(--muted-foreground)';
+            charCountContainer.style.display = 'block';
+          } else {
+            charCountContainer.style.display = 'none';
+          }
+        } else {
+          charCountContainer.style.display = 'none';
+        }
+
+        // Enable/disable send button
+        sendBtn.disabled = target.value.trim().length === 0;
+
+        // Sync with hidden inputs for backward compatibility
+        this.syncInputs(target.value);
+      });
+
+      // Send button
+      sendBtn.addEventListener("click", () => {
+        this.handleSend();
+      });
+
+      // Enter key to send
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          if (!sendBtn.disabled) {
+            this.handleSend();
+          }
+        }
+      });
+
+      // Tone selection - sync with hidden selects
+      toneSelect.addEventListener("change", (e) => {
+        this.syncToneSelects(e.target.value);
+      });
+    }
+
+    syncInputs(value) {
+      // Sync with hidden inputs for backward compatibility
+      const inputs = ["generateInput", "rewriteInput", "threadInput"];
+      inputs.forEach(id => {
+        const input = document.getElementById(id);
+        if (input) input.value = value;
+      });
+    }
+
+    syncToneSelects(value) {
+      // Sync with hidden tone selects for backward compatibility
+      const selects = ["generateTone", "rewriteTone", "threadTone"];
+      selects.forEach(id => {
+        const select = document.getElementById(id);
+        if (select) select.value = value;
+      });
+    }
+
+    handleSend() {
+      const input = document.getElementById("contentInput");
+      if (!input.value.trim()) return;
+
+      // Add user message to chat
+      this.addUserMessage(input.value.trim());
+
+      // Clear input and show loading
+      const userInput = input.value.trim();
+      input.value = "";
+      input.style.height = 'auto';
+      document.getElementById("sendBtn").disabled = true;
+      document.getElementById("charCountContainer").style.display = 'none';
+
+      // Execute based on current tab
+      switch (this.currentTab) {
+        case 'generate':
+          this.generateTweet();
+          break;
+        case 'rewrite':
+          this.rewriteContent();
+          break;
+        case 'thread':
+          this.generateThread();
+          break;
+        default:
+          break;
+      }
+    }
+
+    addUserMessage(text) {
+      const messagesContainer = document.getElementById("messagesContainer");
+      const userMessage = document.createElement("div");
+      userMessage.className = "message-bubble user";
+      userMessage.innerHTML = `
+        <div class="message-content">
+          <p>${this.escapeHtml(text)}</p>
+        </div>
+      `;
+      
+      // Hide welcome message if it exists
+      const welcomeMessage = messagesContainer.querySelector(".welcome-message");
+      if (welcomeMessage) {
+        welcomeMessage.style.display = "none";
+      }
+      
+      messagesContainer.appendChild(userMessage);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    addAssistantMessage(content, actions = []) {
+      const messagesContainer = document.getElementById("messagesContainer");
+      const assistantMessage = document.createElement("div");
+      assistantMessage.className = "message-bubble assistant";
+      
+      let actionsHtml = "";
+      if (actions.length > 0) {
+        actionsHtml = `
+          <div class="message-actions">
+            ${actions.map(action => `
+              <button class="action-btn-small" data-action="${action.type}" data-text="${this.escapeHtml(action.text || content)}">
+                ${action.icon}
+                ${action.label}
+              </button>
+            `).join('')}
+          </div>
+        `;
+      }
+      
+      assistantMessage.innerHTML = `
+        <div class="message-content">
+          <p>${this.escapeHtml(content)}</p>
+          ${actionsHtml}
+        </div>
+      `;
+      
+      messagesContainer.appendChild(assistantMessage);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+      // Bind action buttons
+      assistantMessage.querySelectorAll(".action-btn-small").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          const actionType = btn.dataset.action;
+          const text = btn.dataset.text;
+          
+          switch (actionType) {
+            case 'copy':
+              this.copyToClipboard(text);
+              break;
+            case 'use':
+              this.useContent(text);
+              break;
+            case 'post':
+              if (this.currentTab === 'thread') {
+                this.postThread();
+              }
+              break;
+          }
+        });
+      });
+
+      return assistantMessage;
     }
 
     bindGenerateEvents() {
@@ -258,13 +461,24 @@ if (!window.__xthreads_popup_injected__) {
       agentToggle.addEventListener("change", (e) => {
         this.toggleAgent(e.target.checked);
       });
+
+      // Auto-bot toggle
+      const autoBotToggle = document.getElementById("autoBotToggle");
+      if (autoBotToggle) {
+        autoBotToggle.checked = this.settings.autoBotActive || false;
+        autoBotToggle.addEventListener("change", (e) => {
+          this.toggleAutoBot(e.target.checked);
+        });
+      }
     }
 
     bindReplyEvents() {
       // Copy reply button
       const copyReplyBtn = document.getElementById("copyReplyBtn");
       if (copyReplyBtn) {
-        copyReplyBtn.addEventListener("click", () => {
+        copyReplyBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
           const replyText = document.getElementById("replyText")?.textContent;
           if (replyText) {
             this.copyToClipboard(replyText);
@@ -354,15 +568,39 @@ if (!window.__xthreads_popup_injected__) {
     }
 
     switchTab(tabName) {
-      // Update tab buttons
-      document.querySelectorAll(".tab-btn").forEach((btn) => {
-        btn.classList.toggle("active", btn.dataset.tab === tabName);
-      });
+      // Update dropdown selection
+      const actionSelect = document.getElementById('actionSelect');
+      if (actionSelect) {
+        actionSelect.value = tabName;
+      }
 
-      // Update tab panes
-      document.querySelectorAll(".tab-pane").forEach((pane) => {
-        pane.classList.toggle("active", pane.id === `${tabName}-tab`);
-      });
+      // Always show chat interface (no more special sections)
+      const chatContainer = document.querySelector('.chat-container');
+      const batchSection = document.getElementById('batchOpportunities');
+      const replySection = document.getElementById('replySection');
+      
+      // Hide all special sections
+      if (batchSection) batchSection.style.display = 'none';
+      if (replySection) replySection.style.display = 'none';
+      if (chatContainer) chatContainer.style.display = 'flex';
+      
+      // Update placeholder text based on selection
+      const input = document.getElementById('contentInput');
+      if (input) {
+        switch (tabName) {
+          case 'generate':
+            input.placeholder = '✨ Describe your idea or topic...';
+            break;
+          case 'rewrite':
+            input.placeholder = '✏️ Paste your content here to rewrite...';
+            break;
+          case 'thread':
+            input.placeholder = '📝 What topic should I create a thread about?';
+            break;
+          default:
+            input.placeholder = '✨ Describe your idea or topic...';
+        }
+      }
 
       this.currentTab = tabName;
     }
@@ -629,6 +867,47 @@ if (!window.__xthreads_popup_injected__) {
       }
     }
 
+    async toggleAutoBot(isActive) {
+      this.settings.autoBotActive = isActive;
+      await this.saveSettings();
+
+      try {
+        // Get current X.com tabs
+        const tabs = await chrome.tabs.query({
+          url: ["https://x.com/*", "https://twitter.com/*"],
+        });
+
+        const message = {
+          action: isActive ? "startAutoBot" : "stopAutoBot",
+          settings: this.settings,
+        };
+
+        // Send message to all X.com tabs
+        for (const tab of tabs) {
+          try {
+            await chrome.tabs.sendMessage(tab.id, message);
+          } catch (error) {
+            console.log("Could not send message to tab:", tab.id);
+          }
+        }
+
+        this.updateAutoBotUI();
+        
+        if (isActive) {
+          this.showToast("Auto-Reply Bot started! Navigate to For You page.", "success");
+        } else {
+          this.showToast("Auto-Reply Bot stopped.", "info");
+        }
+      } catch (error) {
+        console.error("Failed to toggle auto-bot:", error);
+        this.showToast("Failed to toggle auto-bot", "error");
+
+        // Revert toggle state
+        document.getElementById("autoBotToggle").checked = !isActive;
+        this.settings.autoBotActive = !isActive;
+      }
+    }
+
     validateAndTruncateContent(content) {
       if (!content) return "";
 
@@ -643,66 +922,127 @@ if (!window.__xthreads_popup_injected__) {
     }
 
     displayGeneratedContent(variations, containerId) {
-      const container = document.getElementById(containerId);
-      container.innerHTML = "";
-
+      // For new chat interface, add as assistant messages
       variations.forEach((variation, index) => {
-        const item = document.createElement("div");
-        item.className = "result-item";
-        item.innerHTML = `
-        <div class="result-text">${variation}</div>
-        <div class="result-actions">
-          <button class="copy-btn" data-text="${this.escapeHtml(variation)}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        const actions = [
+          {
+            type: 'copy',
+            label: 'Copy',
+            text: variation,
+            icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-            </svg>
-            Copy
-          </button>
-        </div>
-      `;
-        container.appendChild(item);
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2 2v1"/>
+            </svg>`
+          },
+          {
+            type: 'use',
+            label: 'Use in X',
+            text: variation,
+            icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 2L11 13"/>
+              <path d="M22 2L15 22L11 13L2 9L22 2Z"/>
+            </svg>`
+          }
+        ];
+        
+        this.addAssistantMessage(variation, actions);
       });
 
-      // Bind copy buttons
-      container.querySelectorAll(".copy-btn").forEach((btn) => {
-        btn.addEventListener("click", (e) => {
-          this.copyToClipboard(e.target.dataset.text);
+      // Also maintain backward compatibility with old container system
+      const container = document.getElementById(containerId);
+      if (container) {
+        container.innerHTML = "";
+
+        variations.forEach((variation, index) => {
+          const item = document.createElement("div");
+          item.className = "result-item";
+          item.innerHTML = `
+            <div class="result-text">${variation}</div>
+            <div class="result-actions">
+              <button class="copy-btn" data-text="${this.escapeHtml(variation)}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                Copy
+              </button>
+            </div>
+          `;
+          container.appendChild(item);
         });
-      });
+
+        // Bind copy buttons
+        container.querySelectorAll(".copy-btn").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.copyToClipboard(btn.dataset.text);
+          });
+        });
+      }
     }
 
     displayThread(thread) {
-      const container = document.getElementById("threadPreview");
-      container.innerHTML = "";
-
-      thread.forEach((tweet, index) => {
-        const item = document.createElement("div");
-        item.className = "thread-tweet";
-        item.innerHTML = `
-          <div class="thread-tweet-header">
-            <span class="thread-tweet-number">Tweet ${index + 1}:</span>
-          </div>
-          <div class="thread-tweet-text">${tweet}</div>
-          <div class="thread-tweet-actions">
-            <button class="copy-btn" data-tweet="${this.escapeHtml(tweet)}">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-              </svg>
-              Copy
-            </button>
-          </div>
-        `;
-        container.appendChild(item);
-      });
+      // For new chat interface, display thread as a single message
+      const threadText = thread.map((tweet, index) => `${index + 1}. ${tweet}`).join('\n\n');
       
-      // Bind individual copy buttons
-      container.querySelectorAll(".copy-btn").forEach((btn) => {
-        btn.addEventListener("click", (e) => {
-          this.copyToClipboard(e.target.dataset.tweet);
+      const actions = [
+        {
+          type: 'copy',
+          label: 'Copy Thread',
+          text: threadText,
+          icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>`
+        },
+        {
+          type: 'post',
+          label: 'Post Thread',
+          icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 2L11 13"/>
+            <path d="M22 2L15 22L11 13L2 9L22 2Z"/>
+          </svg>`
+        }
+      ];
+      
+      this.addAssistantMessage(`Here's your thread:\n\n${threadText}`, actions);
+
+      // Also maintain backward compatibility
+      const container = document.getElementById("threadPreview");
+      if (container) {
+        container.innerHTML = "";
+
+        thread.forEach((tweet, index) => {
+          const item = document.createElement("div");
+          item.className = "thread-tweet";
+          item.innerHTML = `
+            <div class="thread-tweet-header">
+              <span class="thread-tweet-number">Tweet ${index + 1}:</span>
+            </div>
+            <div class="thread-tweet-text">${tweet}</div>
+            <div class="thread-tweet-actions">
+              <button class="copy-btn" data-tweet="${this.escapeHtml(tweet)}">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                Copy
+              </button>
+            </div>
+          `;
+          container.appendChild(item);
         });
-      });
+        
+        // Bind individual copy buttons
+        container.querySelectorAll(".copy-btn").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.copyToClipboard(btn.dataset.tweet);
+          });
+        });
+      }
     }
 
     async useContent(text) {
@@ -764,7 +1104,8 @@ if (!window.__xthreads_popup_injected__) {
         });
 
         this.showToast("Content inserted into composer!", "success");
-        window.close();
+        // Keep popup open for user convenience
+        // window.close();
       } catch (error) {
         console.error("Failed to use content:", error);
         console.error("Error details:", error.message);
@@ -821,7 +1162,8 @@ if (!window.__xthreads_popup_injected__) {
         });
 
         this.showToast("Thread inserted! Ready to post.", "success");
-        window.close();
+        // Keep popup open for user convenience
+        // window.close();
       } catch (error) {
         console.error("Failed to post thread:", error);
         this.showToast("Please open X.com and try again", "error");
@@ -904,6 +1246,7 @@ if (!window.__xthreads_popup_injected__) {
     updateUI() {
       this.updateAgentUI();
       this.updateMonitoringUI();
+      this.updateAutoBotUI();
     }
 
     updateAgentUI() {
@@ -939,6 +1282,19 @@ if (!window.__xthreads_popup_injected__) {
       }
     }
 
+    updateAutoBotUI() {
+      const autoBotStatusDot = document.getElementById("autoBotStatusDot");
+      const autoBotStatusText = document.getElementById("autoBotStatusText");
+      
+      if (this.settings.autoBotActive) {
+        autoBotStatusDot?.classList.add("active");
+        if (autoBotStatusText) autoBotStatusText.textContent = "Running";
+      } else {
+        autoBotStatusDot?.classList.remove("active");
+        if (autoBotStatusText) autoBotStatusText.textContent = "Stopped";
+      }
+    }
+
     updateStats() {
       const repliesCount = document.getElementById("repliesCount");
       const successRate = document.getElementById("successRate");
@@ -956,16 +1312,185 @@ if (!window.__xthreads_popup_injected__) {
       }
     }
 
-    openSettings() {
+    async openSettings() {
       this.updateApiKeyDisplay();
+      
+      // Show modal first
       document.getElementById("settingsModal").style.display = "flex";
+      
+      // Small delay to ensure DOM is ready
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      // Ensure brand spaces are loaded when opening settings
+      if (this.settings.apiKey && this.brandSpaces.length === 0) {
+        console.log('Loading brand spaces for settings modal...');
+        await this.loadBrandSpaces();
+      } else {
+        // Update the selector even if brand spaces are already loaded
+        this.updateBrandSpaceSelectors();
+      }
+      
+      this.loadSettingsIntoModal();
     }
 
     closeSettings() {
       document.getElementById("settingsModal").style.display = "none";
     }
 
+    loadSettingsIntoModal() {
+      // Load brand space
+      const brandSpaceSelect = document.getElementById('settingsBrandSpace');
+      if (brandSpaceSelect) {
+        console.log('Loading brand space into modal:', {
+          selectedBrandId: this.settings.selectedBrandId,
+          availableBrandSpaces: this.brandSpaces.length,
+          selectOptions: brandSpaceSelect.options.length
+        });
+        
+        if (this.settings.selectedBrandId) {
+          brandSpaceSelect.value = this.settings.selectedBrandId;
+          console.log('Set brand space value to:', brandSpaceSelect.value);
+        }
+      } else {
+        console.error('Brand space select element not found!');
+      }
+      
+      // Load tone setting
+      const toneRadios = document.querySelectorAll('input[name="settingsTone"]');
+      toneRadios.forEach(radio => {
+        radio.checked = radio.value === this.settings.tone;
+      });
+      
+      console.log('Loaded settings into modal:', {
+        selectedBrandId: this.settings.selectedBrandId,
+        tone: this.settings.tone,
+        toneRadiosFound: toneRadios.length
+      });
+    }
+
     openHistoryModal() {
+      const modal = document.getElementById('historyModal');
+      if (modal) {
+        modal.style.display = 'flex';
+        this.loadHistoryContent();
+      }
+    }
+
+    closeHistoryModal() {
+      const modal = document.getElementById('historyModal');
+      if (modal) {
+        modal.style.display = 'none';
+      }
+    }
+
+    switchHistoryTab(type) {
+      // Update tab buttons
+      document.querySelectorAll('.history-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.type === type);
+      });
+      
+      // Update content sections
+      document.querySelectorAll('.history-section').forEach(section => {
+        section.classList.remove('active');
+      });
+      
+      const targetSection = document.getElementById(type + 'History');
+      if (targetSection) {
+        targetSection.classList.add('active');
+      }
+      
+      // Load content for this section
+      this.loadHistorySection(type);
+    }
+
+    async loadHistoryContent() {
+      // Load all history sections
+      await this.loadHistorySection('generated');
+      await this.loadHistorySection('rewritten');
+      await this.loadHistorySection('threads');
+    }
+
+    async loadHistorySection(type) {
+      try {
+        const result = await chrome.storage.local.get('xthreads_content_history');
+        const history = result.xthreads_content_history || { tweets: [], rewrites: [], threads: [] };
+        
+        let items = [];
+        let sectionId = '';
+        
+        switch(type) {
+          case 'generated':
+            items = history.tweets || [];
+            sectionId = 'generatedHistory';
+            break;
+          case 'rewritten':
+            items = history.rewrites || [];
+            sectionId = 'rewrittenHistory';
+            break;
+          case 'threads':
+            items = history.threads || [];
+            sectionId = 'threadsHistory';
+            break;
+        }
+        
+        const section = document.getElementById(sectionId);
+        if (!section) return;
+        
+        if (items.length === 0) {
+          // Show empty state (already in HTML)
+          return;
+        }
+        
+        // Clear empty state and show items
+        section.innerHTML = items.map(item => `
+          <div class="history-item">
+            <div class="history-item-header">
+              <span class="history-item-date">${new Date(item.timestamp).toLocaleDateString()}</span>
+              <span class="history-item-tone">${item.tone || 'professional'}</span>
+            </div>
+            <div class="history-item-content">
+              ${Array.isArray(item.content) ? item.content[0] : item.content}
+            </div>
+            <div class="history-item-actions">
+              <button class="copy-btn" onclick="navigator.clipboard.writeText('${Array.isArray(item.content) ? item.content[0].replace(/'/g, "\\'"): item.content.replace(/'/g, "\\'")}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2 2v1"/>
+                </svg>
+                Copy
+              </button>
+              <button class="btn-small btn-secondary" onclick="xThreadsPopup.instance.useHistoryItem('${item.id}', '${type}')">
+                Use
+              </button>
+            </div>
+          </div>
+        `).join('');
+        
+      } catch (error) {
+        console.error('Failed to load history section:', error);
+      }
+    }
+
+    async clearAllHistory() {
+      if (!confirm('Are you sure you want to clear all history? This cannot be undone.')) {
+        return;
+      }
+      
+      try {
+        await chrome.storage.local.set({
+          xthreads_content_history: { tweets: [], rewrites: [], threads: [] }
+        });
+        
+        this.loadHistoryContent();
+        this.showToast('History cleared successfully', 'success');
+      } catch (error) {
+        console.error('Failed to clear history:', error);
+        this.showToast('Failed to clear history', 'error');
+      }
+    }
+
+    openHistoryModalOld() {
+      // Old implementation - keeping for reference but unused
       // Create modal if it doesn't exist
       let modal = document.getElementById('historyModal');
       if (!modal) {
@@ -1103,7 +1628,9 @@ if (!window.__xthreads_popup_injected__) {
       
       // Bind copy buttons
       container.querySelectorAll('.history-copy-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
           const content = btn.dataset.content;
           const type = btn.dataset.type;
           
@@ -1265,7 +1792,11 @@ if (!window.__xthreads_popup_injected__) {
         // Bind copy button
         const copyReplyBtn = document.getElementById('copyReplyBtn');
         if (copyReplyBtn) {
-          copyReplyBtn.onclick = () => this.copyToClipboard(reply);
+          copyReplyBtn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.copyToClipboard(reply);
+          };
         }
         
         this.showToast('Reply generated!', 'success');
@@ -1362,19 +1893,7 @@ if (!window.__xthreads_popup_injected__) {
       this.updateBatchBadge(0);
     }
 
-    updateBatchBadge(count) {
-      const badge = document.getElementById('batchBadge');
-      if (badge) {
-        if (count > 0) {
-          badge.textContent = count.toString();
-          badge.style.display = 'block';
-          badge.classList.add('active');
-        } else {
-          badge.style.display = 'none';
-          badge.classList.remove('active');
-        }
-      }
-    }
+    // Badge functionality removed as requested
 
     async toggleAutoMonitoring(enabled) {
       this.settings.isActive = enabled;
@@ -1564,14 +2083,12 @@ if (!window.__xthreads_popup_injected__) {
           <div class="opportunity-reply-text ${replyClass}">${replyText}</div>
         </div>
         <div class="opportunity-actions">
-          <button class="opportunity-btn copy-and-open" data-reply="${this.escapeHtml(opportunity.reply || '')}" data-url="${cleanUrl}" title="Copy Reply & Open Tweet" ${isDisabled ? 'disabled' : ''}>
+          <button class="opportunity-btn auto-reply" data-reply="${this.escapeHtml(opportunity.reply || '')}" data-url="${cleanUrl}" title="Auto-Reply to Tweet" ${isDisabled ? 'disabled' : ''}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-              <line x1="10" y1="14" x2="21" y2="3"/>
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+              <path d="M9 12l2 2 4-4"/>
             </svg>
-            Copy & Open
+            Auto-Reply
           </button>
           <button class="opportunity-btn edit" data-index="${index}" title="Edit Reply" ${isDisabled ? 'disabled' : ''}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1604,41 +2121,41 @@ if (!window.__xthreads_popup_injected__) {
         });
       }
       
-      // Combined copy and open button
-      const copyOpenBtn = item.querySelector('.opportunity-btn.copy-and-open');
-      if (copyOpenBtn) {
-        copyOpenBtn.addEventListener('click', async (e) => {
+      // Auto-reply button
+      const autoReplyBtn = item.querySelector('.opportunity-btn.auto-reply');
+      if (autoReplyBtn) {
+        autoReplyBtn.addEventListener('click', async (e) => {
           e.preventDefault();
           e.stopPropagation();
-          const reply = copyOpenBtn.dataset.reply;
-          const url = copyOpenBtn.dataset.url;
+          const reply = autoReplyBtn.dataset.reply;
+          const url = autoReplyBtn.dataset.url;
           
-          console.log('🔄 Copy & Open action - Reply:', reply?.substring(0, 30), 'URL:', url);
+          console.log('🤖 Auto-Reply action - Reply:', reply?.substring(0, 30), 'URL:', url);
           
           if (reply && reply !== 'Generating...' && reply !== 'No reply') {
             try {
-              // 1. Copy reply to clipboard
-              await this.copyToClipboard(reply);
-              console.log('✅ Reply copied to clipboard');
+              // Send message to content script to handle auto-reply
+              const success = await this.performAutoReply(url, reply);
               
-              // 2. Open tweet in new tab
-              if (url) {
-                const tab = await chrome.tabs.create({ url, active: true });
-                console.log('✅ Tweet opened in new tab:', tab.id);
-                this.showToast('Reply copied & tweet opened!', 'success');
+              if (success) {
+                this.showToast('Auto-reply sent successfully!', 'success');
+                // Auto-progress to next opportunity
+                await this.processAndRemoveOpportunity(parseInt(item.dataset.index), 'auto-replied');
               } else {
-                this.showToast('Reply copied (invalid URL)', 'warning');
+                // Fallback to copy & manual navigation
+                await this.copyToClipboard(reply);
+                await navigator.clipboard.writeText(url);
+                this.showToast('Auto-reply failed. Reply & URL copied - please paste manually.', 'warning');
               }
               
-              // 3. Auto-progress to next opportunity
-              await this.processAndRemoveOpportunity(parseInt(item.dataset.index), 'copied-and-opened');
-              
             } catch (error) {
-              console.error('❌ Failed copy & open action:', error);
-              this.showToast('Failed to copy & open', 'error');
+              console.error('❌ Failed auto-reply action:', error);
+              // Fallback to copy
+              await this.copyToClipboard(reply);
+              this.showToast('Auto-reply failed. Reply copied - please paste manually.', 'error');
             }
           } else {
-            this.showToast('No reply available to copy', 'error');
+            this.showToast('No reply available', 'error');
           }
         });
       }
@@ -1809,6 +2326,39 @@ if (!window.__xthreads_popup_injected__) {
         }
       } catch (error) {
         console.error('Failed to highlight opportunity:', error);
+      }
+    }
+
+    async performAutoReply(tweetUrl, reply) {
+      try {
+        console.log('🤖 Attempting auto-reply to:', tweetUrl);
+        
+        // Find X.com tabs
+        const tabs = await chrome.tabs.query({
+          url: ["https://x.com/*", "https://twitter.com/*"]
+        });
+        
+        if (tabs.length === 0) {
+          console.log('❌ No X.com tabs found');
+          return false;
+        }
+        
+        const targetTab = tabs[0];
+        console.log('📱 Found X.com tab:', targetTab.id);
+        
+        // Send message to content script to handle auto-reply
+        const response = await chrome.tabs.sendMessage(targetTab.id, {
+          action: 'performAutoReply',
+          tweetUrl: tweetUrl,
+          reply: reply
+        });
+        
+        console.log('🔄 Auto-reply response:', response);
+        return response && response.success;
+        
+      } catch (error) {
+        console.error('❌ Auto-reply failed:', error);
+        return false;
       }
     }
 
@@ -2145,16 +2695,32 @@ if (!window.__xthreads_popup_injected__) {
       try {
         await navigator.clipboard.writeText(text);
         this.showToast("Copied to clipboard!", "success");
+        return true;
       } catch (error) {
         console.error("Failed to copy:", error);
         // Fallback for older browsers
-        const textArea = document.createElement("textarea");
-        textArea.value = text;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textArea);
-        this.showToast("Copied to clipboard!", "success");
+        try {
+          const textArea = document.createElement("textarea");
+          textArea.value = text;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-999999px';
+          textArea.style.top = '-999999px';
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          const result = document.execCommand("copy");
+          document.body.removeChild(textArea);
+          if (result) {
+            this.showToast("Copied to clipboard!", "success");
+            return true;
+          } else {
+            throw new Error("Copy command failed");
+          }
+        } catch (fallbackError) {
+          console.error("Fallback copy failed:", fallbackError);
+          this.showToast("Failed to copy to clipboard", "error");
+          return false;
+        }
       }
     }
 

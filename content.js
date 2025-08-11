@@ -26,40 +26,93 @@ if (!window.__xthreads_injected__) {
     
     .xthreads-toast {
       position: fixed;
-      top: 20px;
-      right: 20px;
+      top: 24px;
+      right: 24px;
       z-index: 999999;
-      padding: 12px 20px;
-      border-radius: 8px;
-      color: white;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      padding: 16px 20px;
+      border-radius: 12px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
       font-size: 14px;
       font-weight: 500;
-      max-width: 350px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-      animation: slideInRight 0.3s ease-out;
+      color: white;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      animation: xthreads-toast-in 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      max-width: 380px;
+      min-width: 280px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+    }
+    
+    .xthreads-toast::before {
+      content: '';
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
     }
     
     .xthreads-toast-info {
-      background: #00bcd4;
+      background: linear-gradient(135deg, rgba(29, 161, 242, 0.95), rgba(0, 188, 212, 0.95));
+      border-color: rgba(29, 161, 242, 0.3);
+    }
+    
+    .xthreads-toast-info::before {
+      background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" fill="white" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>');
     }
     
     .xthreads-toast-success {
-      background: #4CAF50;
+      background: linear-gradient(135deg, rgba(76, 175, 80, 0.95), rgba(102, 187, 106, 0.95));
+      border-color: rgba(76, 175, 80, 0.3);
+    }
+    
+    .xthreads-toast-success::before {
+      background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" fill="white" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>');
     }
     
     .xthreads-toast-error {
-      background: #f44336;
+      background: linear-gradient(135deg, rgba(244, 67, 54, 0.95), rgba(229, 115, 115, 0.95));
+      border-color: rgba(244, 67, 54, 0.3);
     }
     
-    @keyframes slideInRight {
-      from {
-        transform: translateX(100%);
+    .xthreads-toast-error::before {
+      background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" fill="white" viewBox="0 0 24 24"><path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z"/></svg>');
+    }
+    
+    .xthreads-toast-text {
+      flex: 1;
+      line-height: 1.4;
+    }
+    
+    @keyframes xthreads-toast-in {
+      0% {
+        transform: translateX(120%) scale(0.8);
         opacity: 0;
       }
-      to {
-        transform: translateX(0);
+      60% {
+        transform: translateX(-8px) scale(1.02);
+        opacity: 0.9;
+      }
+      100% {
+        transform: translateX(0) scale(1);
         opacity: 1;
+      }
+    }
+    
+    @keyframes xthreads-toast-out {
+      0% {
+        transform: translateX(0) scale(1);
+        opacity: 1;
+      }
+      100% {
+        transform: translateX(120%) scale(0.8);
+        opacity: 0;
       }
     }
   `;
@@ -146,6 +199,22 @@ if (!window.__xthreads_injected__) {
 
           case "showAgenticReplyNotification":
             this.showAgenticReplyNotification(message.tweetData, message.reply);
+            sendResponse({ success: true });
+            break;
+          case "performAutoReply":
+            this.performAutoReply(message.tweetUrl, message.reply).then(success => {
+              sendResponse({ success });
+            }).catch(error => {
+              console.error('❌ Auto-reply failed:', error);
+              sendResponse({ success: false, error: error.message });
+            });
+            return true; // Keep message channel open for async response
+          case "startAutoBot":
+            this.startAutoBot(message.settings);
+            sendResponse({ success: true });
+            break;
+          case "stopAutoBot":
+            this.stopAutoBot();
             sendResponse({ success: true });
             break;
         }
@@ -330,10 +399,16 @@ if (!window.__xthreads_injected__) {
       });
 
       // Click handler
-      buttonElement.addEventListener("click", (e) => {
+      buttonElement.addEventListener("click", async (e) => {
         e.preventDefault();
         e.stopPropagation();
-        this.openReplyWithTweetData(tweetData);
+        console.log("xThreads button clicked! Tweet data:", tweetData);
+        try {
+          await this.openReplyWithTweetData(tweetData);
+        } catch (error) {
+          console.error("Manual reply failed:", error);
+          this.showToast("Error generating reply: " + error.message, "error");
+        }
       });
 
       // Insert after reply button
@@ -1013,23 +1088,55 @@ if (!window.__xthreads_injected__) {
       return "";
     }
 
-    openReplyWithTweetData(tweetData) {
-      // Store tweet data for popup to access
-      chrome.storage.local.set({
-        xthreads_current_tweet: {
-          ...tweetData,
-          timestamp: Date.now(),
-        },
-      });
+    async openReplyWithTweetData(tweetData) {
+      console.log("🔄 Manual reply called with tweet data:", tweetData);
 
-      // Show visual indicator since we can't reliably open popup programmatically
-      this.showOpenPopupIndicator();
+      try {
+        if (!tweetData || !tweetData.content) {
+          throw new Error("Invalid tweet data");
+        }
 
-      // Also try background script approach as fallback
-      chrome.runtime.sendMessage({
-        action: "openPopupToReplyTab",
-        tweetData: tweetData,
-      });
+        this.showToast("Generating reply...", "info");
+
+        console.log("📡 Sending message to background script...");
+        
+        // Generate reply using background script  
+        const response = await chrome.runtime.sendMessage({
+          action: "generateReply",
+          tweetData: tweetData,
+        });
+
+        console.log("📥 Background response:", response);
+
+        if (response && response.success && response.reply) {
+          console.log("✅ Manual reply generated:", response.reply);
+          
+          // Copy to clipboard
+          await navigator.clipboard.writeText(response.reply);
+          console.log("📋 Reply copied to clipboard");
+          
+          // Find and click the reply button for this tweet
+          const tweetElement = document.querySelector(`[href*="${tweetData.id}"]`)?.closest('[data-testid="tweet"]');
+          const replyButton = tweetElement?.querySelector('[data-testid="reply"]');
+          
+          console.log("🔍 Found tweet element:", !!tweetElement, "Reply button:", !!replyButton);
+          
+          if (replyButton) {
+            replyButton.click();
+            console.log("✅ Reply button clicked");
+            this.showToast("Reply copied! Please paste (Ctrl+V) and post manually.", "success");
+          } else {
+            this.showToast("Reply copied to clipboard! Please open reply manually.", "success");
+          }
+          
+        } else {
+          console.error("Failed to generate manual reply:", response?.error);
+          this.showToast("Failed to generate reply: " + (response?.error || "Unknown error"), "error");
+        }
+      } catch (error) {
+        console.error("Error generating manual reply:", error);
+        this.showToast("Error generating reply: " + error.message, "error");
+      }
     }
 
     openReplyTab(tweetData) {
@@ -2539,18 +2646,925 @@ if (!window.__xthreads_injected__) {
       console.log("✅ Agentic reply notification displayed");
     }
 
+    async performAutoReply(tweetUrl, reply) {
+      try {
+        console.log('🤖 Starting auto-reply process:', { tweetUrl, reply: reply.substring(0, 50) + '...' });
+        
+        // 1. Navigate to the tweet URL if not already there
+        if (window.location.href !== tweetUrl) {
+          console.log('🔄 Navigating to tweet URL:', tweetUrl);
+          window.location.href = tweetUrl;
+          
+          // Wait for navigation to complete
+          await this.waitForNavigation(tweetUrl);
+        }
+        
+        // 2. Wait for the page to fully load
+        await this.waitForPageLoad();
+        
+        // 3. Click the reply button
+        console.log('🔘 Looking for reply button...');
+        const replyButton = await this.waitForElement('[data-testid="reply"]', 5000);
+        if (!replyButton) {
+          throw new Error('Reply button not found');
+        }
+        
+        console.log('🔘 Clicking reply button...');
+        replyButton.click();
+        
+        // 4. Wait for reply composer to appear
+        console.log('✏️ Waiting for reply composer...');
+        const composer = await this.waitForElement(
+          '[data-testid="tweetTextarea_0"], [role="textbox"][contenteditable="true"]', 
+          3000
+        );
+        
+        if (!composer) {
+          throw new Error('Reply composer not found');
+        }
+        
+        // 5. Insert the reply text
+        console.log('📝 Inserting reply text...');
+        await this.insertTextIntoComposer(composer, reply);
+        
+        // 6. Show success message
+        this.showToast('🤖 Reply ready! Please review and click Post manually.', 'success');
+        
+        // 7. Highlight the tweet button for easy manual clicking
+        setTimeout(() => {
+          const tweetButton = document.querySelector('[data-testid="tweetButton"]');
+          if (tweetButton) {
+            tweetButton.focus();
+            tweetButton.style.outline = '3px solid #1DA1F2';
+            tweetButton.style.boxShadow = '0 0 10px #1DA1F2';
+            // Keep highlighting for longer since manual action is needed
+            setTimeout(() => {
+              tweetButton.style.outline = '';
+              tweetButton.style.boxShadow = '';
+            }, 10000); // 10 seconds
+          }
+        }, 500);
+        
+        return true;
+        
+      } catch (error) {
+        console.error('❌ Auto-reply failed:', error);
+        this.showToast(`Auto-reply failed: ${error.message}`, 'error');
+        return false;
+      }
+    }
+    
+    async waitForNavigation(targetUrl, timeout = 10000) {
+      return new Promise((resolve, reject) => {
+        const startTime = Date.now();
+        
+        const checkUrl = () => {
+          if (window.location.href === targetUrl) {
+            resolve();
+          } else if (Date.now() - startTime > timeout) {
+            reject(new Error('Navigation timeout'));
+          } else {
+            setTimeout(checkUrl, 100);
+          }
+        };
+        
+        checkUrl();
+      });
+    }
+    
+    async waitForPageLoad(timeout = 5000) {
+      return new Promise((resolve) => {
+        if (document.readyState === 'complete') {
+          resolve();
+        } else {
+          const timer = setTimeout(() => resolve(), timeout);
+          window.addEventListener('load', () => {
+            clearTimeout(timer);
+            resolve();
+          }, { once: true });
+        }
+      });
+    }
+    
+    async waitForElement(selector, timeout = 5000) {
+      return new Promise((resolve) => {
+        const startTime = Date.now();
+        
+        const checkElement = () => {
+          const element = document.querySelector(selector);
+          if (element) {
+            resolve(element);
+          } else if (Date.now() - startTime > timeout) {
+            resolve(null);
+          } else {
+            setTimeout(checkElement, 100);
+          }
+        };
+        
+        checkElement();
+      });
+    }
+    
+    async insertTextIntoComposer(composer, text, options = {}) {
+      try {
+        // Method 1: Try direct textContent/innerHTML
+        if (composer.contentEditable === 'true') {
+          composer.focus();
+          
+          // Remove Draft.js placeholder elements first
+          const placeholders = composer.querySelectorAll('.public-DraftEditorPlaceholder-root, .public-DraftEditorPlaceholder-inner');
+          placeholders.forEach(placeholder => placeholder.remove());
+          
+          composer.textContent = text;
+          
+          // Trigger input events
+          composer.dispatchEvent(new Event('input', { bubbles: true }));
+          composer.dispatchEvent(new Event('change', { bubbles: true }));
+          
+          // Enable tweet button
+          await this.enableTweetButton(composer);
+          
+          // Schedule the tweet if requested
+          if (options.schedule) {
+            await this.scheduleReply(composer, options.scheduleMinutes || 5);
+          }
+          
+          return true;
+        }
+        
+        // Method 2: Try using the existing typeInComposer method if available
+        if (this.typeInComposer) {
+          return await this.typeInComposer(composer, text);
+        }
+        
+        // Method 3: Fallback - copy to clipboard and show message
+        await navigator.clipboard.writeText(text);
+        this.showToast('Reply copied to clipboard! Please paste it manually.', 'info');
+        return true;
+        
+      } catch (error) {
+        console.error('Failed to insert text into composer:', error);
+        throw error;
+      }
+    }
+
+    async enableTweetButton(composer) {
+      try {
+        // Find the nearest tweet button
+        const tweetButton = composer.closest('form')?.querySelector('[data-testid="tweetButton"]') ||
+                           composer.closest('[role="dialog"]')?.querySelector('[data-testid="tweetButton"]') ||
+                           document.querySelector('[data-testid="tweetButton"]');
+        
+        if (tweetButton) {
+          // Remove disabled attributes
+          tweetButton.removeAttribute('disabled');
+          tweetButton.removeAttribute('aria-disabled');
+          tweetButton.removeAttribute('tabindex');
+          
+          // Update CSS classes - replace disabled state class with enabled state class
+          tweetButton.classList.remove('r-icoktb'); // disabled state
+          tweetButton.classList.add('r-1loqt21'); // enabled state
+          
+          console.log('✅ Tweet button enabled');
+        }
+      } catch (error) {
+        console.error('Failed to enable tweet button:', error);
+      }
+    }
+
+    async scheduleReply(composer, delayMinutes = 5) {
+      try {
+        console.log(`🕒 Scheduling reply for ${delayMinutes} minutes from now...`);
+        
+        // 1. Click the schedule button
+        const scheduleButton = composer.closest('form')?.querySelector('[data-testid="scheduleOption"]') ||
+                             composer.closest('[role="dialog"]')?.querySelector('[data-testid="scheduleOption"]') ||
+                             document.querySelector('[data-testid="scheduleOption"]');
+        
+        if (!scheduleButton) {
+          console.error('Schedule button not found');
+          return false;
+        }
+        
+        scheduleButton.click();
+        await this.delay(1000); // Wait for schedule dialog to open
+        
+        // 2. Calculate target time (current time + delay)
+        const now = new Date();
+        const targetTime = new Date(now.getTime() + (delayMinutes * 60 * 1000));
+        const targetHour = targetTime.getHours();
+        const targetMinute = targetTime.getMinutes();
+        
+        console.log(`Setting schedule time to: ${targetHour}:${targetMinute.toString().padStart(2, '0')}`);
+        
+        // 3. Set the hour
+        const hourSelect = document.querySelector('select[aria-labelledby*="_LABEL"]:nth-of-type(1)') || 
+                          document.querySelector('label:has(> span:contains("Hour")) + select') ||
+                          document.querySelector('select[aria-labelledby*="14"]');
+        if (hourSelect) {
+          hourSelect.value = targetHour.toString();
+          hourSelect.dispatchEvent(new Event('change', { bubbles: true }));
+          await this.delay(300);
+        }
+        
+        // 4. Set the minute  
+        const minuteSelect = document.querySelector('select[aria-labelledby*="_LABEL"]:nth-of-type(2)') ||
+                           document.querySelector('label:has(> span:contains("Minute")) + select') ||
+                           document.querySelector('select[aria-labelledby*="15"]');
+        if (minuteSelect) {
+          minuteSelect.value = targetMinute.toString();
+          minuteSelect.dispatchEvent(new Event('change', { bubbles: true }));
+          await this.delay(300);
+        }
+        
+        // 5. Click confirm
+        const confirmButton = document.querySelector('[data-testid="scheduledConfirmationPrimaryAction"]');
+        if (confirmButton) {
+          confirmButton.click();
+          console.log('✅ Reply scheduled successfully');
+          this.showToast(`🤖 Reply scheduled for ${delayMinutes} minutes from now!`, 'success');
+          return true;
+        } else {
+          console.error('Confirm button not found');
+          return false;
+        }
+        
+      } catch (error) {
+        console.error('Failed to schedule reply:', error);
+        return false;
+      }
+    }
+
+    async waitForUserPaste(composer) {
+      return new Promise((resolve) => {
+        let isResolved = false;
+        const initialContent = composer.textContent || '';
+        
+        // Monitor for content changes (user pasting)
+        const inputHandler = () => {
+          const currentContent = composer.textContent || '';
+          if (currentContent !== initialContent && currentContent.trim().length > 0 && !isResolved) {
+            isResolved = true;
+            cleanup();
+            resolve('pasted');
+          }
+        };
+        
+        // Monitor for escape key or modal close (cancellation)
+        const escapeHandler = (event) => {
+          if (event.key === 'Escape' && !isResolved) {
+            isResolved = true;
+            cleanup();
+            resolve('cancelled');
+          }
+        };
+        
+        // Monitor for composer disappearing (modal closed)
+        const composerObserver = new MutationObserver(() => {
+          if (!document.contains(composer) && !isResolved) {
+            isResolved = true;
+            cleanup();
+            resolve('cancelled');
+          }
+        });
+        
+        // Set up listeners
+        composer.addEventListener('input', inputHandler);
+        composer.addEventListener('paste', inputHandler);
+        document.addEventListener('keydown', escapeHandler);
+        composerObserver.observe(document.body, { childList: true, subtree: true });
+        
+        // Cleanup function
+        const cleanup = () => {
+          composer.removeEventListener('input', inputHandler);
+          composer.removeEventListener('paste', inputHandler);
+          document.removeEventListener('keydown', escapeHandler);
+          composerObserver.disconnect();
+        };
+        
+        // Timeout after 5 minutes to prevent infinite waiting
+        setTimeout(() => {
+          if (!isResolved) {
+            isResolved = true;
+            cleanup();
+            resolve('timeout');
+          }
+        }, 300000); // 5 minutes
+      });
+    }
+
+    delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
     showToast(message, type = "info") {
+      // Remove any existing toasts first
+      document.querySelectorAll('.xthreads-toast').forEach(toast => toast.remove());
+      
       const toast = document.createElement("div");
       toast.className = `xthreads-toast xthreads-toast-${type}`;
-      toast.textContent = message;
-
+      
+      const textSpan = document.createElement("span");
+      textSpan.className = "xthreads-toast-text";
+      textSpan.textContent = message;
+      
+      toast.appendChild(textSpan);
       document.body.appendChild(toast);
 
+      // Auto-dismiss after 5 seconds with fade out animation
       setTimeout(() => {
         if (toast.parentNode) {
-          toast.remove();
+          toast.style.animation = 'xthreads-toast-out 0.3s cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards';
+          setTimeout(() => {
+            if (toast.parentNode) {
+              toast.remove();
+            }
+          }, 300);
         }
-      }, 4000);
+      }, 5000);
+      
+      // Click to dismiss
+      toast.addEventListener('click', () => {
+        if (toast.parentNode) {
+          toast.style.animation = 'xthreads-toast-out 0.3s cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards';
+          setTimeout(() => {
+            if (toast.parentNode) {
+              toast.remove();
+            }
+          }, 300);
+        }
+      });
+    }
+
+    // Auto-Bot System
+    startAutoBot(settings) {
+      console.log('🤖 Starting Auto-Reply Bot...');
+      this.autoBotSettings = settings;
+      this.autoBotActive = true;
+      this.autoBotStats = {
+        repliesThisHour: 0,
+        totalReplies: 0,
+        startTime: Date.now(),
+        lastReplyTime: 0,
+        processedTweets: new Set()
+      };
+
+      // Check if we're on For You page
+      if (!this.isOnForYouPage()) {
+        this.showToast('Auto-Bot: Please navigate to For You page (x.com/home)', 'info');
+        return;
+      }
+
+      this.showToast('Auto-Reply Bot activated! Scanning tweets with high engagement...', 'success');
+      this.startAutoBotLoop();
+    }
+
+    stopAutoBot() {
+      console.log('🛑 Stopping Auto-Reply Bot...');
+      this.autoBotActive = false;
+      
+      if (this.autoBotInterval) {
+        clearInterval(this.autoBotInterval);
+        this.autoBotInterval = null;
+      }
+      
+      if (this.autoBotTimeout) {
+        clearTimeout(this.autoBotTimeout);
+        this.autoBotTimeout = null;
+      }
+
+      this.showToast('Auto-Reply Bot stopped', 'info');
+    }
+
+    isOnForYouPage() {
+      return window.location.pathname === '/home' || 
+             window.location.href.includes('x.com/home') ||
+             window.location.href.includes('twitter.com/home');
+    }
+
+    startAutoBotLoop() {
+      if (!this.autoBotActive) return;
+
+      // Main bot loop - runs every 5 seconds to scan for tweets
+      this.autoBotInterval = setInterval(async () => {
+        if (!this.autoBotActive) return;
+        
+        try {
+          await this.scanAndReplyToTweets();
+        } catch (error) {
+          console.error('❌ Auto-bot loop error:', error);
+        }
+      }, 5000); // Scan every 5 seconds
+    }
+
+    async scanAndReplyToTweets() {
+      if (!this.isOnForYouPage()) {
+        console.log('📍 Not on For You page, pausing auto-bot');
+        return;
+      }
+
+      // Rate limiting check
+      const now = Date.now();
+      const hourAgo = now - (60 * 60 * 1000);
+      
+      // Reset hourly counter if needed
+      if (this.autoBotStats.startTime < hourAgo) {
+        this.autoBotStats.repliesThisHour = 0;
+        this.autoBotStats.startTime = now;
+      }
+
+      // Check if we hit rate limit
+      if (this.autoBotStats.repliesThisHour >= 120) {
+        console.log('⏰ Rate limit reached (120/hour), pausing until next hour');
+        this.showToast('Rate limit reached (120 replies/hour). Bot paused.', 'warning');
+        return;
+      }
+
+      // Check minimum time between replies (30 seconds)
+      if (now - this.autoBotStats.lastReplyTime < 30000) {
+        console.log('⏱️ Waiting for 30-second cooldown between replies');
+        return;
+      }
+
+      // Scan for eligible tweets
+      const eligibleTweets = this.findEligibleTweets();
+      
+      if (eligibleTweets.length === 0) {
+        console.log('📊 No eligible tweets found, attempting scroll...');
+        await this.smartScroll();
+        return;
+      }
+
+      console.log(`🎯 Found ${eligibleTweets.length} eligible tweets`);
+      
+      // Pick a random tweet to avoid patterns
+      const targetTweet = eligibleTweets[Math.floor(Math.random() * eligibleTweets.length)];
+      
+      await this.processAutoReply(targetTweet);
+    }
+
+    findEligibleTweets() {
+      const tweets = document.querySelectorAll('[data-testid="tweet"]');
+      const eligible = [];
+
+      tweets.forEach(tweet => {
+        try {
+          // Extract tweet data
+          const tweetData = this.extractTweetData(tweet);
+          if (!tweetData) return;
+
+          // Skip if already processed
+          if (this.autoBotStats.processedTweets.has(tweetData.id)) return;
+
+          // Skip own tweets (basic check)
+          if (this.isOwnTweet(tweet)) return;
+
+          // Check like count
+          const likeCount = this.extractLikeCount(tweet);
+          if (likeCount < 300) return;
+
+          eligible.push({
+            element: tweet,
+            data: tweetData,
+            likes: likeCount
+          });
+
+          console.log(`✅ Eligible tweet: ${tweetData.content.substring(0, 50)}... (${likeCount} likes)`);
+
+        } catch (error) {
+          console.error('Error processing tweet:', error);
+        }
+      });
+
+      return eligible;
+    }
+
+    extractLikeCount(tweet) {
+      try {
+        // Look for like button and count
+        const likeButton = tweet.querySelector('[data-testid="like"]');
+        if (!likeButton) return 0;
+
+        const likeCountElement = likeButton.querySelector('[data-testid="app-text-transition-container"]');
+        if (!likeCountElement) return 0;
+
+        const likeText = likeCountElement.textContent.trim();
+        
+        // Convert formatted numbers (1.2K, 5.3M, etc) to actual numbers
+        return this.parseFormattedNumber(likeText);
+      } catch (error) {
+        console.error('Error extracting like count:', error);
+        return 0;
+      }
+    }
+
+    parseFormattedNumber(text) {
+      if (!text) return 0;
+      
+      const num = parseFloat(text);
+      if (text.includes('K')) return Math.floor(num * 1000);
+      if (text.includes('M')) return Math.floor(num * 1000000);
+      return Math.floor(num);
+    }
+
+    isOwnTweet(tweet) {
+      // Simple check - can be improved
+      return false;
+    }
+
+    async processAutoReply(targetTweet) {
+      try {
+        // Flag that we're processing to prevent multiple tweets
+        this.isProcessingTweet = true;
+        
+        console.log(`🔥 Processing viral tweet (${targetTweet.data.viralScore.toFixed(1)} likes/hour):`, targetTweet.data.content.substring(0, 50));
+
+        // Mark as processed immediately
+        this.autoBotStats.processedTweets.add(targetTweet.data.id);
+
+        // Generate AI reply
+        console.log('🧠 Generating AI reply...');
+        const reply = await this.generateAutoReply(targetTweet.data);
+        
+        if (!reply) {
+          console.log('❌ No reply generated, skipping');
+          this.isProcessingTweet = false;
+          return;
+        }
+
+        console.log('✅ Generated reply:', reply.substring(0, 50));
+
+        // Perform the reply (copy to clipboard and open composer)
+        const success = await this.performAutoReply(targetTweet, reply);
+
+        if (success) {
+          this.autoBotStats.repliesThisHour++;
+          this.autoBotStats.totalReplies++;
+          this.autoBotStats.lastReplyTime = Date.now();
+          
+          console.log(`✅ Reply ready for manual paste! (${this.autoBotStats.repliesThisHour}/60 this hour)`);
+        }
+
+        // Reset processing flag after user action completes
+        this.isProcessingTweet = false;
+
+      } catch (error) {
+        console.error('❌ Auto-reply process failed:', error);
+        this.isProcessingTweet = false;
+      }
+    }
+
+    async generateAutoReply(tweetData) {
+      try {
+        const response = await fetch('https://www.xthreads.app/api/ai-reply', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': this.autoBotSettings.apiKey
+          },
+          body: JSON.stringify({
+            parentTweetContent: tweetData.content,
+            brandId: this.autoBotSettings.selectedBrandId,
+            tone: this.autoBotSettings.tone || 'professional'
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.reply || data.content;
+
+      } catch (error) {
+        console.error('❌ Failed to generate auto-reply:', error);
+        return null;
+      }
+    }
+
+    async performAutoReply(targetTweet, reply) {
+      try {
+        console.log('🎯 Auto-replying to tweet:', targetTweet.data.content.substring(0, 50));
+
+        // 1. Scroll tweet into view
+        await this.scrollIntoView(targetTweet.element);
+        await this.delay(500);
+
+        // 2. Click reply button
+        const replyButton = targetTweet.element.querySelector('[data-testid="reply"]');
+        if (!replyButton) {
+          throw new Error('Reply button not found');
+        }
+
+        replyButton.click();
+        
+        // 3. Wait for composer to appear
+        await this.delay(1000);
+        
+        const composer = await this.waitForElement(
+          '[data-testid="tweetTextarea_0"], [role="textbox"][contenteditable="true"]', 
+          3000
+        );
+
+        if (!composer) {
+          console.log('❌ Composer not found, using escape and moving on');
+          this.pressEscape();
+          return false;
+        }
+
+        // 4. Simulate real keyboard typing (what actually works!)
+        try {
+          composer.focus();
+          await this.delay(300);
+          
+          // Clear any existing content first
+          if (composer.textContent) {
+            composer.dispatchEvent(new KeyboardEvent('keydown', {
+              key: 'a', ctrlKey: true, bubbles: true
+            }));
+            await this.delay(50);
+          }
+          
+          console.log('⌨️ Starting keyboard simulation...');
+          
+          // Type each character with real keyboard events
+          for (let i = 0; i < reply.length; i++) {
+            const char = reply[i];
+            const keyCode = char.charCodeAt(0);
+            
+            // Simulate keydown
+            const keydownEvent = new KeyboardEvent('keydown', {
+              key: char,
+              keyCode: keyCode,
+              which: keyCode,
+              bubbles: true,
+              cancelable: true
+            });
+            composer.dispatchEvent(keydownEvent);
+            
+            // Simulate keypress (for character input)
+            const keypressEvent = new KeyboardEvent('keypress', {
+              key: char,
+              keyCode: keyCode,
+              which: keyCode,
+              charCode: keyCode,
+              bubbles: true,
+              cancelable: true
+            });
+            composer.dispatchEvent(keypressEvent);
+            
+            // Simulate keyup
+            const keyupEvent = new KeyboardEvent('keyup', {
+              key: char,
+              keyCode: keyCode,
+              which: keyCode,
+              bubbles: true,
+              cancelable: true
+            });
+            composer.dispatchEvent(keyupEvent);
+            
+            // Small delay to mimic fast typing
+            if (i % 5 === 0) await this.delay(10); // Brief pause every 5 chars
+          }
+          
+          console.log('✅ Keyboard simulation completed');
+          await this.delay(1000);
+          
+        } catch (keyboardError) {
+          console.log('❌ Keyboard simulation failed, trying direct method:', keyboardError);
+          
+          // Fallback: Focus and try execCommand
+          try {
+            composer.focus();
+            await this.delay(200);
+            
+            // Select all content
+            document.execCommand('selectAll');
+            await this.delay(50);
+            
+            // Insert text using execCommand (works with many editors)
+            document.execCommand('insertText', false, reply);
+            await this.delay(500);
+            
+            // Trigger focus/blur to update Draft.js state
+            composer.blur();
+            await this.delay(100);
+            composer.focus();
+            
+          } catch (fallbackError) {
+            console.log('❌ All methods failed:', fallbackError);
+            this.pressEscape();
+            return false;
+          }
+        }
+
+        // 5. Click Tweet button
+        const tweetButton = document.querySelector('[data-testid="tweetButton"]');
+        if (!tweetButton) {
+          console.log('❌ Tweet button not found, using escape and moving on');
+          this.pressEscape();
+          return false;
+        }
+
+        // Wait a bit more for tweet button to enable
+        await this.delay(500);
+        
+        // Check if tweet button is disabled (character limit, etc.)
+        if (tweetButton.disabled || 
+            tweetButton.getAttribute('aria-disabled') === 'true' ||
+            tweetButton.classList.contains('r-bnwqim')) { // X's disabled button class
+          
+          console.log('❌ Tweet button still disabled after paste. Character count:', this.getCharacterCount());
+          
+          // Try one more time with different paste method
+          try {
+            composer.focus();
+            await this.delay(100);
+            composer.innerHTML = reply.replace(/\n/g, '<br>');
+            composer.dispatchEvent(new Event('input', { bubbles: true }));
+            await this.delay(1000);
+            
+            // Check again
+            if (tweetButton.disabled || tweetButton.getAttribute('aria-disabled') === 'true') {
+              console.log('❌ Tweet button still disabled after retry, escaping');
+              this.pressEscape();
+              return false;
+            }
+          } catch (retryError) {
+            console.log('❌ Retry failed, escaping');
+            this.pressEscape();
+            return false;
+          }
+        }
+
+        // Copy reply to clipboard and wait for user to paste manually
+        console.log('📋 Copying reply to clipboard...');
+        
+        await navigator.clipboard.writeText(reply);
+        
+        // Show message and wait for user to paste
+        this.showToast('🤖 Reply copied to clipboard! Please paste manually and post, or press Escape to skip.', 'success');
+        
+        // Wait for user to paste content in composer or cancel
+        const userAction = await this.waitForUserPaste(composer);
+        
+        if (userAction === 'pasted') {
+          console.log('✅ User pasted and can now post manually');
+          return true;
+        } else {
+          console.log('⏭️ User cancelled, moving on');
+          return false;
+        }
+
+      } catch (error) {
+        console.error('❌ Auto-reply failed:', error);
+        this.pressEscape(); // Try to escape any modal/composer
+        return false;
+      }
+    }
+
+
+    async scrollIntoView(element) {
+      element.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'center' 
+      });
+      await this.delay(1000);
+    }
+
+    async delay(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async randomDelay(min, max) {
+      const delay = Math.random() * (max - min) + min;
+      return new Promise(resolve => setTimeout(resolve, delay));
+    }
+
+    pressEscape() {
+      try {
+        // Press escape key to close any modals/composers
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Escape',
+          code: 'Escape',
+          keyCode: 27,
+          bubbles: true
+        }));
+        
+        document.dispatchEvent(new KeyboardEvent('keyup', {
+          key: 'Escape',
+          code: 'Escape',
+          keyCode: 27,
+          bubbles: true
+        }));
+        
+        console.log('⌨️ Pressed escape key');
+      } catch (error) {
+        console.error('Failed to press escape:', error);
+      }
+    }
+
+    getCharacterCount() {
+      try {
+        // Try to find X's character counter
+        const counterSelectors = [
+          '[data-testid="tweetTextarea_0_indicator"]',
+          '[aria-label*="characters"]',
+          '.r-1tl8opc', // X's character count styling
+          '.css-1dbjc4n r-1tl8opc'
+        ];
+
+        for (const selector of counterSelectors) {
+          const counter = document.querySelector(selector);
+          if (counter) {
+            const text = counter.textContent;
+            const match = text.match(/(\d+)/);
+            if (match) {
+              return parseInt(match[1]);
+            }
+          }
+        }
+
+        // Fallback: check composer content length
+        const composer = document.querySelector('[data-testid="tweetTextarea_0"], [role="textbox"][contenteditable="true"]');
+        if (composer) {
+          return composer.textContent.length;
+        }
+
+        return 0;
+      } catch (error) {
+        console.error('Error getting character count:', error);
+        return 0;
+      }
+    }
+
+    detectTwitterErrors() {
+      try {
+        // Check for common X error patterns
+        const errorSelectors = [
+          '[data-testid="error"]',
+          '[role="alert"]',
+          '.r-1loqt21', // Twitter error styling
+          '[data-testid="toast"]'
+        ];
+
+        for (const selector of errorSelectors) {
+          const errorElement = document.querySelector(selector);
+          if (errorElement) {
+            const errorText = errorElement.textContent.toLowerCase();
+            
+            // Check for rate limiting, spam detection, etc.
+            if (errorText.includes('rate limit') ||
+                errorText.includes('try again') ||
+                errorText.includes('spam') ||
+                errorText.includes('suspicious') ||
+                errorText.includes('restricted') ||
+                errorText.includes('temporarily unavailable')) {
+              
+              console.log('🚨 X error detected:', errorText);
+              this.showToast(`X Error: ${errorText} - Stopping bot`, 'error');
+              return true;
+            }
+          }
+        }
+
+        return false;
+      } catch (error) {
+        console.error('Error checking for Twitter errors:', error);
+        return false;
+      }
+    }
+
+    async smartScroll() {
+      try {
+        // Check if we can scroll more
+        const scrollableHeight = document.body.scrollHeight;
+        const currentScroll = window.pageYOffset + window.innerHeight;
+        
+        if (currentScroll >= scrollableHeight - 100) {
+          console.log('🔄 Reached scroll limit, refreshing page...');
+          this.showToast('🔄 Refreshing For You page for new tweets...', 'info');
+          
+          // Wait a moment then refresh
+          await this.delay(2000);
+          window.location.reload();
+          return;
+        }
+
+        // Simple scrolling
+        const scrollAmount = Math.random() * 600 + 300; // 300-900px
+        window.scrollBy({
+          top: scrollAmount,
+          behavior: 'smooth'
+        });
+
+        // Wait for new content to load
+        await this.delay(2000);
+
+      } catch (error) {
+        console.error('❌ Smart scroll failed, refreshing page:', error);
+        window.location.reload();
+      }
     }
   }
 
