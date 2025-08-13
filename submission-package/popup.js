@@ -46,7 +46,7 @@ if (!window.__xthreads_popup_injected__) {
       this.updateStats();
       await this.checkForTweetData(); // Check if we should open reply tab
       await this.checkForBatchOpportunities(); // Check for batch opportunities
-      
+
       // Update badge with current batch opportunity count
       this.updateBatchBadge(this.batchOpportunityCount);
     }
@@ -100,7 +100,10 @@ if (!window.__xthreads_popup_injected__) {
           this.updateBrandSpaceSelectors();
         } else {
           console.error("Failed to load brand spaces:", response.status);
-          this.showToast(`Failed to load brand spaces: ${response.status}`, "error");
+          this.showToast(
+            `Failed to load brand spaces: ${response.status}`,
+            "error"
+          );
         }
       } catch (error) {
         console.error("Failed to load brand spaces:", error);
@@ -123,16 +126,18 @@ if (!window.__xthreads_popup_injected__) {
             option.value = brand._id;
             option.textContent = brand.name;
             option.selected = brand._id === this.settings.selectedBrandId;
-            console.log(`Brand: ${brand.name}, ID: ${brand._id}, Selected: ${option.selected}`);
+            console.log(
+              `Brand: ${brand.name}, ID: ${brand._id}, Selected: ${option.selected}`
+            );
             select.appendChild(option);
           });
-          
+
           // Ensure the dropdown reflects the selected value
           if (this.settings.selectedBrandId) {
             select.value = this.settings.selectedBrandId;
           }
         }
-        
+
         // If no brand is selected but we have brands, show a warning
         if (this.brandSpaces.length > 0 && !this.settings.selectedBrandId) {
           this.showToast("Please select a brand space to continue", "info");
@@ -273,7 +278,9 @@ if (!window.__xthreads_popup_injected__) {
 
     bindBatchEvents() {
       // Auto-monitoring toggle
-      const autoMonitoringToggle = document.getElementById("autoMonitoringToggle");
+      const autoMonitoringToggle = document.getElementById(
+        "autoMonitoringToggle"
+      );
       if (autoMonitoringToggle) {
         autoMonitoringToggle.addEventListener("change", (e) => {
           this.toggleAutoMonitoring(e.target.checked);
@@ -367,7 +374,9 @@ if (!window.__xthreads_popup_injected__) {
 
     async generateTweet() {
       const input = document.getElementById("generateInput");
-      const tone = this.validateTone(document.getElementById("generateTone").value);
+      const tone = this.validateTone(
+        document.getElementById("generateTone").value
+      );
       const btn = document.getElementById("generateBtn");
       const results = document.getElementById("generateResults");
 
@@ -376,8 +385,14 @@ if (!window.__xthreads_popup_injected__) {
         return;
       }
 
-      if (!this.settings.selectedBrandId || this.settings.selectedBrandId === "undefined") {
-        this.showToast("Please select a brand space in settings first", "error");
+      if (
+        !this.settings.selectedBrandId ||
+        this.settings.selectedBrandId === "undefined"
+      ) {
+        this.showToast(
+          "Please select a brand space in settings first",
+          "error"
+        );
         this.openSettings();
         return;
       }
@@ -409,7 +424,7 @@ if (!window.__xthreads_popup_injected__) {
         const tweet = this.validateAndTruncateContent(data.tweet);
 
         // Save to history
-        await this.addToHistory('tweet', tweet);
+        await this.addToHistory("tweet", tweet);
 
         this.displayGeneratedContent([tweet], "generateVariations");
         results.style.display = "block";
@@ -432,7 +447,9 @@ if (!window.__xthreads_popup_injected__) {
 
     async rewriteContent() {
       const input = document.getElementById("rewriteInput");
-      const tone = this.validateTone(document.getElementById("rewriteTone").value);
+      const tone = this.validateTone(
+        document.getElementById("rewriteTone").value
+      );
       const btn = document.getElementById("rewriteBtn");
       const results = document.getElementById("rewriteResults");
 
@@ -441,8 +458,14 @@ if (!window.__xthreads_popup_injected__) {
         return;
       }
 
-      if (!this.settings.selectedBrandId || this.settings.selectedBrandId === "undefined") {
-        this.showToast("Please select a brand space in settings first", "error");
+      if (
+        !this.settings.selectedBrandId ||
+        this.settings.selectedBrandId === "undefined"
+      ) {
+        this.showToast(
+          "Please select a brand space in settings first",
+          "error"
+        );
         this.openSettings();
         return;
       }
@@ -477,7 +500,7 @@ if (!window.__xthreads_popup_injected__) {
         );
 
         // Save to history
-        await this.addToHistory('rewrite', validatedVariations[0]);
+        await this.addToHistory("rewrite", validatedVariations[0]);
 
         this.displayGeneratedContent(validatedVariations, "rewriteVariations");
         results.style.display = "block";
@@ -501,7 +524,9 @@ if (!window.__xthreads_popup_injected__) {
 
     async generateThread() {
       const input = document.getElementById("threadInput");
-      const tone = this.validateTone(document.getElementById("threadTone").value);
+      const tone = this.validateTone(
+        document.getElementById("threadTone").value
+      );
       const btn = document.getElementById("threadBtn");
       const results = document.getElementById("threadResults");
 
@@ -510,8 +535,14 @@ if (!window.__xthreads_popup_injected__) {
         return;
       }
 
-      if (!this.settings.selectedBrandId || this.settings.selectedBrandId === "undefined") {
-        this.showToast("Please select a brand space in settings first", "error");
+      if (
+        !this.settings.selectedBrandId ||
+        this.settings.selectedBrandId === "undefined"
+      ) {
+        this.showToast(
+          "Please select a brand space in settings first",
+          "error"
+        );
         this.openSettings();
         return;
       }
@@ -546,9 +577,9 @@ if (!window.__xthreads_popup_injected__) {
         );
 
         this.currentThread = validatedThread;
-        
+
         // Save to history
-        await this.addToHistory('thread', validatedThread);
+        await this.addToHistory("thread", validatedThread);
 
         this.displayThread(validatedThread);
         results.style.display = "block";
@@ -676,7 +707,7 @@ if (!window.__xthreads_popup_injected__) {
         `;
         container.appendChild(item);
       });
-      
+
       // Bind individual copy buttons
       container.querySelectorAll(".copy-btn").forEach((btn) => {
         btn.addEventListener("click", (e) => {
@@ -688,14 +719,14 @@ if (!window.__xthreads_popup_injected__) {
     async useContent(text) {
       try {
         console.log("Looking for X.com tabs...");
-        
+
         // First try to get active X.com tab in current window
         let tabs = await chrome.tabs.query({
           url: ["https://x.com/*", "https://twitter.com/*"],
           active: true,
-          currentWindow: true
+          currentWindow: true,
         });
-        
+
         console.log("Active X.com tabs in current window:", tabs);
 
         let targetTab;
@@ -706,11 +737,11 @@ if (!window.__xthreads_popup_injected__) {
           // Check if any X.com tab exists in current window
           tabs = await chrome.tabs.query({
             url: ["https://x.com/*", "https://twitter.com/*"],
-            currentWindow: true
+            currentWindow: true,
           });
-          
+
           console.log("All X.com tabs in current window:", tabs);
-          
+
           if (tabs.length > 0) {
             targetTab = tabs[0];
             console.log("Found X.com tab, switching to it:", targetTab.url);
@@ -718,16 +749,21 @@ if (!window.__xthreads_popup_injected__) {
           } else {
             // Check all windows
             tabs = await chrome.tabs.query({
-              url: ["https://x.com/*", "https://twitter.com/*"]
+              url: ["https://x.com/*", "https://twitter.com/*"],
             });
-            
+
             console.log("All X.com tabs in all windows:", tabs);
-            
+
             if (tabs.length > 0) {
               targetTab = tabs[0];
-              console.log("Found X.com tab in another window, switching to it:", targetTab.url);
+              console.log(
+                "Found X.com tab in another window, switching to it:",
+                targetTab.url
+              );
               await chrome.tabs.update(targetTab.id, { active: true });
-              await chrome.windows.update(targetTab.windowId, { focused: true });
+              await chrome.windows.update(targetTab.windowId, {
+                focused: true,
+              });
             } else {
               this.showToast("Please open X.com in a tab first", "error");
               return;
@@ -736,7 +772,7 @@ if (!window.__xthreads_popup_injected__) {
         }
 
         console.log("Sending message to tab:", targetTab.id);
-        
+
         // Send message to content script to type the text
         await chrome.tabs.sendMessage(targetTab.id, {
           action: "typeInComposer",
@@ -763,7 +799,7 @@ if (!window.__xthreads_popup_injected__) {
         let tabs = await chrome.tabs.query({
           url: ["https://x.com/*", "https://twitter.com/*"],
           active: true,
-          currentWindow: true
+          currentWindow: true,
         });
 
         let targetTab;
@@ -772,21 +808,23 @@ if (!window.__xthreads_popup_injected__) {
         } else {
           tabs = await chrome.tabs.query({
             url: ["https://x.com/*", "https://twitter.com/*"],
-            currentWindow: true
+            currentWindow: true,
           });
-          
+
           if (tabs.length > 0) {
             targetTab = tabs[0];
             await chrome.tabs.update(targetTab.id, { active: true });
           } else {
             tabs = await chrome.tabs.query({
-              url: ["https://x.com/*", "https://twitter.com/*"]
+              url: ["https://x.com/*", "https://twitter.com/*"],
             });
-            
+
             if (tabs.length > 0) {
               targetTab = tabs[0];
               await chrome.tabs.update(targetTab.id, { active: true });
-              await chrome.windows.update(targetTab.windowId, { focused: true });
+              await chrome.windows.update(targetTab.windowId, {
+                focused: true,
+              });
             } else {
               this.showToast("Please open X.com in a tab first", "error");
               return;
@@ -874,7 +912,7 @@ if (!window.__xthreads_popup_injected__) {
 
       console.log("Saving settings:", this.settings);
       console.log("Selected brand ID:", this.settings.selectedBrandId);
-      
+
       await this.saveSettings();
       this.updateBrandSpaceSelectors();
       this.closeSettings();
@@ -906,16 +944,18 @@ if (!window.__xthreads_popup_injected__) {
     }
 
     updateMonitoringUI() {
-      const autoMonitoringToggle = document.getElementById("autoMonitoringToggle");
+      const autoMonitoringToggle = document.getElementById(
+        "autoMonitoringToggle"
+      );
       const monitoringState = document.getElementById("monitoringState");
-      
+
       if (autoMonitoringToggle) {
         autoMonitoringToggle.checked = this.settings.isActive;
       }
-      
+
       if (monitoringState) {
-        monitoringState.textContent = this.settings.isActive ? 'ON' : 'OFF';
-        monitoringState.classList.toggle('active', this.settings.isActive);
+        monitoringState.textContent = this.settings.isActive ? "ON" : "OFF";
+        monitoringState.classList.toggle("active", this.settings.isActive);
       }
     }
 
@@ -947,11 +987,11 @@ if (!window.__xthreads_popup_injected__) {
 
     openHistoryModal() {
       // Create modal if it doesn't exist
-      let modal = document.getElementById('historyModal');
+      let modal = document.getElementById("historyModal");
       if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'historyModal';
-        modal.className = 'modal';
+        modal = document.createElement("div");
+        modal.id = "historyModal";
+        modal.className = "modal";
         modal.innerHTML = `
           <div class="modal-content">
             <div class="modal-header">
@@ -994,80 +1034,106 @@ if (!window.__xthreads_popup_injected__) {
           </div>
         `;
         document.body.appendChild(modal);
-        
+
         // Bind close events
-        document.getElementById('closeHistory').addEventListener('click', () => {
-          modal.style.display = 'none';
-        });
-        
+        document
+          .getElementById("closeHistory")
+          .addEventListener("click", () => {
+            modal.style.display = "none";
+          });
+
         // Clear history button
-        document.getElementById('clearHistoryBtn').addEventListener('click', async () => {
-          if (confirm('Are you sure you want to clear all history?')) {
-            await chrome.storage.local.remove(['xthreads_history_tweet', 'xthreads_history_rewrite', 'xthreads_history_thread']);
-            this.showToast('History cleared', 'success');
-            this.loadHistoryModal();
-          }
-        });
-        
+        document
+          .getElementById("clearHistoryBtn")
+          .addEventListener("click", async () => {
+            if (confirm("Are you sure you want to clear all history?")) {
+              await chrome.storage.local.remove([
+                "xthreads_history_tweet",
+                "xthreads_history_rewrite",
+                "xthreads_history_thread",
+              ]);
+              this.showToast("History cleared", "success");
+              this.loadHistoryModal();
+            }
+          });
+
         // Close on backdrop click
-        modal.addEventListener('click', (e) => {
+        modal.addEventListener("click", (e) => {
           if (e.target === modal) {
-            modal.style.display = 'none';
+            modal.style.display = "none";
           }
         });
       }
-      
+
       // Load and display history
       this.loadHistoryModal();
-      modal.style.display = 'flex';
+      modal.style.display = "flex";
     }
 
     async loadHistoryModal() {
       try {
         const result = await chrome.storage.local.get([
-          'xthreads_history_tweet',
-          'xthreads_history_rewrite', 
-          'xthreads_history_thread'
+          "xthreads_history_tweet",
+          "xthreads_history_rewrite",
+          "xthreads_history_thread",
         ]);
-        
-        this.displayHistorySection('historyTweets', result.xthreads_history_tweet || [], 'tweet');
-        this.displayHistorySection('historyRewrites', result.xthreads_history_rewrite || [], 'rewrite');
-        this.displayHistorySection('historyThreads', result.xthreads_history_thread || [], 'thread');
-        
+
+        this.displayHistorySection(
+          "historyTweets",
+          result.xthreads_history_tweet || [],
+          "tweet"
+        );
+        this.displayHistorySection(
+          "historyRewrites",
+          result.xthreads_history_rewrite || [],
+          "rewrite"
+        );
+        this.displayHistorySection(
+          "historyThreads",
+          result.xthreads_history_thread || [],
+          "thread"
+        );
       } catch (error) {
-        console.error('Failed to load history:', error);
+        console.error("Failed to load history:", error);
       }
     }
 
     displayHistorySection(containerId, items, type) {
       const container = document.getElementById(containerId);
       if (!container) return;
-      
+
       if (items.length === 0) {
-        container.innerHTML = '<div class="history-empty">No history found</div>';
+        container.innerHTML =
+          '<div class="history-empty">No history found</div>';
         return;
       }
-      
-      container.innerHTML = '';
+
+      container.innerHTML = "";
       items.forEach((item, index) => {
-        const historyItem = document.createElement('div');
-        historyItem.className = 'history-item';
-        
-        const isThread = type === 'thread' && Array.isArray(item.content);
+        const historyItem = document.createElement("div");
+        historyItem.className = "history-item";
+
+        const isThread = type === "thread" && Array.isArray(item.content);
         const displayContent = isThread ? item.content[0] : item.content;
-        const threadInfo = isThread ? `<div class="history-thread-count">${item.content.length} tweets</div>` : '';
-        
+        const threadInfo = isThread
+          ? `<div class="history-thread-count">${item.content.length} tweets</div>`
+          : "";
+
         historyItem.innerHTML = `
           <div class="history-item-header">
             <div class="history-item-type">${type}</div>
-            <div class="history-item-time">${this.formatTime(item.timestamp)}</div>
+            <div class="history-item-time">${this.formatTime(
+              item.timestamp
+            )}</div>
           </div>
-          <div class="history-item-content ${isThread ? 'is-thread' : ''}">
+          <div class="history-item-content ${isThread ? "is-thread" : ""}">
             ${displayContent}
           </div>
           ${threadInfo}
           <div class="history-item-actions">
-            <button class="history-copy-btn" data-content="${this.escapeHtml(isThread ? JSON.stringify(item.content) : item.content)}" data-type="${type}">
+            <button class="history-copy-btn" data-content="${this.escapeHtml(
+              isThread ? JSON.stringify(item.content) : item.content
+            )}" data-type="${type}">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
@@ -1077,21 +1143,21 @@ if (!window.__xthreads_popup_injected__) {
             <button class="history-delete-btn" data-index="${index}" data-type="${type}">Delete</button>
           </div>
         `;
-        
+
         container.appendChild(historyItem);
       });
-      
+
       // Bind copy buttons
-      container.querySelectorAll('.history-copy-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
+      container.querySelectorAll(".history-copy-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
           const content = btn.dataset.content;
           const type = btn.dataset.type;
-          
-          if (type === 'thread') {
+
+          if (type === "thread") {
             // For threads, copy all tweets
             try {
               const threadContent = JSON.parse(content);
-              const fullThread = threadContent.join('\n\n');
+              const fullThread = threadContent.join("\n\n");
               this.copyToClipboard(fullThread);
             } catch (e) {
               this.copyToClipboard(content);
@@ -1101,10 +1167,10 @@ if (!window.__xthreads_popup_injected__) {
           }
         });
       });
-      
+
       // Bind delete buttons
-      container.querySelectorAll('.history-delete-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
+      container.querySelectorAll(".history-delete-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
           const index = parseInt(btn.dataset.index);
           const type = btn.dataset.type;
           await this.deleteHistoryItem(type, index);
@@ -1118,14 +1184,14 @@ if (!window.__xthreads_popup_injected__) {
         const storageKey = `xthreads_history_${type}`;
         const result = await chrome.storage.local.get(storageKey);
         const items = result[storageKey] || [];
-        
+
         items.splice(index, 1);
         await chrome.storage.local.set({ [storageKey]: items });
-        
-        this.showToast('Item deleted', 'success');
+
+        this.showToast("Item deleted", "success");
       } catch (error) {
-        console.error('Failed to delete history item:', error);
-        this.showToast('Failed to delete item', 'error');
+        console.error("Failed to delete history item:", error);
+        this.showToast("Failed to delete item", "error");
       }
     }
 
@@ -1135,8 +1201,8 @@ if (!window.__xthreads_popup_injected__) {
       const minutes = Math.floor(diff / 60000);
       const hours = Math.floor(diff / 3600000);
       const days = Math.floor(diff / 86400000);
-      
-      if (minutes < 1) return 'Just now';
+
+      if (minutes < 1) return "Just now";
       if (minutes < 60) return `${minutes}m ago`;
       if (hours < 24) return `${hours}h ago`;
       return `${days}d ago`;
@@ -1144,49 +1210,51 @@ if (!window.__xthreads_popup_injected__) {
 
     async checkForTweetData() {
       try {
-        const result = await chrome.storage.local.get('xthreads_current_tweet');
+        const result = await chrome.storage.local.get("xthreads_current_tweet");
         if (result.xthreads_current_tweet) {
           const tweetData = result.xthreads_current_tweet;
-          
+
           // Check if tweet data is recent (within last 30 seconds)
-          const isRecent = (Date.now() - tweetData.timestamp) < 30000;
-          
+          const isRecent = Date.now() - tweetData.timestamp < 30000;
+
           if (isRecent) {
             // Switch to reply tab and load tweet context
-            this.switchTab('reply');
+            this.switchTab("reply");
             this.loadTweetContext(tweetData);
-            
+
             // Clear the tweet data so it doesn't load again
-            await chrome.storage.local.remove('xthreads_current_tweet');
+            await chrome.storage.local.remove("xthreads_current_tweet");
           }
         }
       } catch (error) {
-        console.error('Failed to check for tweet data:', error);
+        console.error("Failed to check for tweet data:", error);
       }
     }
 
     loadTweetContext(tweetData) {
       // Show tweet context
-      const tweetContext = document.getElementById('tweetContext');
-      const tweetAuthor = document.getElementById('tweetAuthor');
-      const tweetContent = document.getElementById('tweetContent');
-      
+      const tweetContext = document.getElementById("tweetContext");
+      const tweetAuthor = document.getElementById("tweetAuthor");
+      const tweetContent = document.getElementById("tweetContent");
+
       if (tweetContext && tweetAuthor && tweetContent) {
         // Extract author from URL or use placeholder
-        const authorMatch = tweetData.url?.match(/twitter\.com\/([^\/]+)/) || tweetData.url?.match(/x\.com\/([^\/]+)/);
-        const author = authorMatch ? `@${authorMatch[1]}` : 'Unknown Author';
-        
+        const authorMatch =
+          tweetData.url?.match(/twitter\.com\/([^\/]+)/) ||
+          tweetData.url?.match(/x\.com\/([^\/]+)/);
+        const author = authorMatch ? `@${authorMatch[1]}` : "Unknown Author";
+
         tweetAuthor.textContent = author;
         tweetContent.textContent = tweetData.content;
-        tweetContext.style.display = 'block';
-        
+        tweetContext.style.display = "block";
+
         // Hide empty state, show context
-        const replyEmpty = document.getElementById('replyEmpty');
-        if (replyEmpty) replyEmpty.style.display = 'none';
-        
+        const replyEmpty = document.getElementById("replyEmpty");
+        if (replyEmpty) replyEmpty.style.display = "none";
+
         // Store current tweet data for reply generation
         this.currentTweetData = tweetData;
-        
+
         // Auto-generate reply
         this.generateAgenticReply();
       }
@@ -1194,108 +1262,112 @@ if (!window.__xthreads_popup_injected__) {
 
     async generateAgenticReply() {
       if (!this.currentTweetData) return;
-      
+
       // Validate settings
-      if (!this.settings.selectedBrandId || this.settings.selectedBrandId === "undefined") {
+      if (
+        !this.settings.selectedBrandId ||
+        this.settings.selectedBrandId === "undefined"
+      ) {
         this.openSettings();
         return;
       }
-      
+
       // Show loading state
-      const replyLoading = document.getElementById('replyLoading');
-      const replyResult = document.getElementById('replyResult');
-      
-      if (replyLoading) replyLoading.style.display = 'block';
-      if (replyResult) replyResult.style.display = 'none';
-      
+      const replyLoading = document.getElementById("replyLoading");
+      const replyResult = document.getElementById("replyResult");
+
+      if (replyLoading) replyLoading.style.display = "block";
+      if (replyResult) replyResult.style.display = "none";
+
       try {
-        const response = await fetch('https://www.xthreads.app/api/ai-reply', {
-          method: 'POST',
+        const response = await fetch("https://www.xthreads.app/api/ai-reply", {
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': this.settings.apiKey
+            "Content-Type": "application/json",
+            "x-api-key": this.settings.apiKey,
           },
           body: JSON.stringify({
             parentTweetContent: this.currentTweetData.content,
             brandId: this.settings.selectedBrandId,
-            tone: this.settings.tone || 'professional'
-          })
+            tone: this.settings.tone || "professional",
+          }),
         });
-        
+
         if (!response.ok) {
           throw new Error(`API request failed: ${response.status}`);
         }
-        
+
         const data = await response.json();
         const reply = data.reply || data.content;
-        
+
         if (!reply) {
-          throw new Error('No reply generated');
+          throw new Error("No reply generated");
         }
-        
+
         // Show result
-        const replyText = document.getElementById('replyText');
+        const replyText = document.getElementById("replyText");
         if (replyText) {
           replyText.textContent = reply;
         }
-        
-        if (replyLoading) replyLoading.style.display = 'none';
-        if (replyResult) replyResult.style.display = 'block';
-        
+
+        if (replyLoading) replyLoading.style.display = "none";
+        if (replyResult) replyResult.style.display = "block";
+
         // Bind copy button
-        const copyReplyBtn = document.getElementById('copyReplyBtn');
+        const copyReplyBtn = document.getElementById("copyReplyBtn");
         if (copyReplyBtn) {
           copyReplyBtn.onclick = () => this.copyToClipboard(reply);
         }
-        
-        this.showToast('Reply generated!', 'success');
-        
+
+        this.showToast("Reply generated!", "success");
       } catch (error) {
-        console.error('Failed to generate reply:', error);
-        if (replyLoading) replyLoading.style.display = 'none';
-        this.showToast('Failed to generate reply. Please try again.', 'error');
+        console.error("Failed to generate reply:", error);
+        if (replyLoading) replyLoading.style.display = "none";
+        this.showToast("Failed to generate reply. Please try again.", "error");
       }
     }
 
     async checkForBatchOpportunities() {
       try {
-        const result = await chrome.storage.local.get('xthreads_batch_opportunities');
+        const result = await chrome.storage.local.get(
+          "xthreads_batch_opportunities"
+        );
         const opportunities = result.xthreads_batch_opportunities || [];
-        
+
         // Always display opportunities UI
         this.displayBatchOpportunities(opportunities);
-        
+
         // Store the count for badge updates
         this.batchOpportunityCount = opportunities.length;
-        
+
         return opportunities;
       } catch (error) {
-        console.error('Failed to check for batch opportunities:', error);
+        console.error("Failed to check for batch opportunities:", error);
         return [];
       }
     }
 
     openBatchOpportunities() {
       // Switch to reply tab
-      this.switchTab('reply');
-      
+      this.switchTab("reply");
+
       // Load and display batch opportunities (this will show persisted opportunities)
       this.checkForBatchOpportunities();
-      
+
       // Clear the badge since user has opened the batch view and can see the opportunities
       this.updateBatchBadge(0);
     }
 
     updateBatchBadge(count) {
-      const badge = document.getElementById('batchBadge');
+      const badge = document.getElementById("batchBadge");
       if (badge) {
         if (count > 0) {
           badge.textContent = count.toString();
-          badge.style.display = 'block';
-          badge.classList.add('active');
+          badge.style.display = "block";
+          badge.classList.add("active");
         } else {
-          badge.style.display = 'none';
-          badge.classList.remove('active');
+          badge.style.display = "none";
+          badge.classList.remove("active");
         }
       }
     }
@@ -1303,60 +1375,72 @@ if (!window.__xthreads_popup_injected__) {
     async toggleAutoMonitoring(enabled) {
       this.settings.isActive = enabled;
       await this.saveSettings();
-      
+
       // Update UI
-      const monitoringState = document.getElementById('monitoringState');
+      const monitoringState = document.getElementById("monitoringState");
       if (monitoringState) {
-        monitoringState.textContent = enabled ? 'ON' : 'OFF';
-        monitoringState.classList.toggle('active', enabled);
+        monitoringState.textContent = enabled ? "ON" : "OFF";
+        monitoringState.classList.toggle("active", enabled);
       }
-      
+
       // Send message to content script
       try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab && tab.url?.includes('x.com')) {
+        const [tab] = await chrome.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
+        if (tab && tab.url?.includes("x.com")) {
           chrome.tabs.sendMessage(tab.id, {
-            action: enabled ? 'startAgent' : 'stopAgent',
-            settings: this.settings
+            action: enabled ? "startAgent" : "stopAgent",
+            settings: this.settings,
           });
         }
       } catch (error) {
-        console.log('Content script not available');
+        console.log("Content script not available");
       }
-      
-      this.showToast(`Auto-monitoring ${enabled ? 'enabled' : 'disabled'}`, 'success');
+
+      this.showToast(
+        `Auto-monitoring ${enabled ? "enabled" : "disabled"}`,
+        "success"
+      );
     }
 
     async refreshOpportunities() {
-      const refreshBtn = document.getElementById('refreshScanBtn');
+      const refreshBtn = document.getElementById("refreshScanBtn");
       const originalText = refreshBtn?.textContent;
-      
+
       if (refreshBtn) {
         refreshBtn.disabled = true;
-        refreshBtn.textContent = 'Scanning...';
+        refreshBtn.textContent = "Scanning...";
       }
-      
+
       try {
         // Send scan request to content script
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab && tab.url?.includes('x.com')) {
+        const [tab] = await chrome.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
+        if (tab && tab.url?.includes("x.com")) {
           chrome.tabs.sendMessage(tab.id, {
-            action: 'scanForAgenticReplies',
-            settings: this.settings
+            action: "scanForAgenticReplies",
+            settings: this.settings,
           });
-          
-          this.showToast('Scanning for opportunities...', 'info');
-          
+
+          this.showToast("Scanning for opportunities...", "info");
+
           // Check for results after a delay
           setTimeout(async () => {
             await this.checkForBatchOpportunities();
           }, 3000);
         } else {
-          this.showToast('Please open X.com to scan for opportunities', 'error');
+          this.showToast(
+            "Please open X.com to scan for opportunities",
+            "error"
+          );
         }
       } catch (error) {
-        console.error('Failed to refresh opportunities:', error);
-        this.showToast('Failed to scan for opportunities', 'error');
+        console.error("Failed to refresh opportunities:", error);
+        this.showToast("Failed to scan for opportunities", "error");
       } finally {
         if (refreshBtn) {
           refreshBtn.disabled = false;
@@ -1366,47 +1450,47 @@ if (!window.__xthreads_popup_injected__) {
     }
 
     displayBatchOpportunities(opportunities) {
-      const batchOpportunities = document.getElementById('batchOpportunities');
-      const replySection = document.getElementById('replySection');
-      const batchTitle = document.getElementById('batchTitle');
-      const opportunitiesList = document.getElementById('opportunitiesList');
-      
+      const batchOpportunities = document.getElementById("batchOpportunities");
+      const replySection = document.getElementById("replySection");
+      const batchTitle = document.getElementById("batchTitle");
+      const opportunitiesList = document.getElementById("opportunitiesList");
+
       if (!opportunities || opportunities.length === 0) {
-        if (batchOpportunities) batchOpportunities.style.display = 'none';
-        if (replySection) replySection.style.display = 'block';
+        if (batchOpportunities) batchOpportunities.style.display = "none";
+        if (replySection) replySection.style.display = "block";
         return;
       }
-      
+
       // Show batch opportunities, hide single reply section
-      if (batchOpportunities) batchOpportunities.style.display = 'block';
-      if (replySection) replySection.style.display = 'none';
-      
+      if (batchOpportunities) batchOpportunities.style.display = "block";
+      if (replySection) replySection.style.display = "none";
+
       // Update title
       if (batchTitle) {
         batchTitle.textContent = `Reply Opportunities (${opportunities.length})`;
       }
-      
+
       // Clear and populate list
       if (opportunitiesList) {
-        opportunitiesList.innerHTML = '';
-        
+        opportunitiesList.innerHTML = "";
+
         opportunities.forEach((opportunity, index) => {
           const item = this.createOpportunityItem(opportunity, index);
           opportunitiesList.appendChild(item);
         });
       }
-      
+
       this.updateBatchControls();
     }
 
     createOpportunityItem(opportunity, index) {
-      const item = document.createElement('div');
-      item.className = 'opportunity-item';
+      const item = document.createElement("div");
+      item.className = "opportunity-item";
       item.dataset.index = index;
-      
-      const author = this.extractAuthorFromUrl(opportunity.url) || 'Unknown';
+
+      const author = this.extractAuthorFromUrl(opportunity.url) || "Unknown";
       const timeAgo = this.formatTime(opportunity.timestamp || Date.now());
-      
+
       item.innerHTML = `
         <div class="opportunity-header">
           <input type="checkbox" class="opportunity-checkbox" data-index="${index}">
@@ -1418,17 +1502,23 @@ if (!window.__xthreads_popup_injected__) {
         <div class="opportunity-content">${opportunity.content}</div>
         <div class="opportunity-reply">
           <div class="opportunity-reply-label">Generated Reply:</div>
-          <div class="opportunity-reply-text">${opportunity.reply || 'Generating...'}</div>
+          <div class="opportunity-reply-text">${
+            opportunity.reply || "Generating..."
+          }</div>
         </div>
         <div class="opportunity-actions">
-          <button class="opportunity-btn open" data-url="${opportunity.url}" title="Open Tweet in Background">
+          <button class="opportunity-btn open" data-url="${
+            opportunity.url
+          }" title="Open Tweet in Background">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
               <polyline points="15,3 21,3 21,9"/>
               <line x1="10" y1="14" x2="21" y2="3"/>
             </svg>
           </button>
-          <button class="opportunity-btn copy" data-reply="${this.escapeHtml(opportunity.reply || '')}" title="Copy Reply">
+          <button class="opportunity-btn copy" data-reply="${this.escapeHtml(
+            opportunity.reply || ""
+          )}" title="Copy Reply">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
@@ -1448,27 +1538,27 @@ if (!window.__xthreads_popup_injected__) {
           </button>
         </div>
       `;
-      
+
       // Bind individual events
       this.bindOpportunityEvents(item);
-      
+
       return item;
     }
 
     bindOpportunityEvents(item) {
       // Checkbox change
-      const checkbox = item.querySelector('.opportunity-checkbox');
+      const checkbox = item.querySelector(".opportunity-checkbox");
       if (checkbox) {
-        checkbox.addEventListener('change', () => {
-          item.classList.toggle('selected', checkbox.checked);
+        checkbox.addEventListener("change", () => {
+          item.classList.toggle("selected", checkbox.checked);
           this.updateBatchControls();
         });
       }
-      
+
       // Open tweet button
-      const openBtn = item.querySelector('.opportunity-btn.open');
+      const openBtn = item.querySelector(".opportunity-btn.open");
       if (openBtn) {
-        openBtn.addEventListener('click', (e) => {
+        openBtn.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
           const url = openBtn.dataset.url;
@@ -1478,11 +1568,11 @@ if (!window.__xthreads_popup_injected__) {
           }
         });
       }
-      
+
       // Copy reply button
-      const copyBtn = item.querySelector('.opportunity-btn.copy');
+      const copyBtn = item.querySelector(".opportunity-btn.copy");
       if (copyBtn) {
-        copyBtn.addEventListener('click', (e) => {
+        copyBtn.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
           const reply = copyBtn.dataset.reply;
@@ -1491,21 +1581,21 @@ if (!window.__xthreads_popup_injected__) {
           }
         });
       }
-      
+
       // Edit button
-      const editBtn = item.querySelector('.opportunity-btn.edit');
+      const editBtn = item.querySelector(".opportunity-btn.edit");
       if (editBtn) {
-        editBtn.addEventListener('click', (e) => {
+        editBtn.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
           this.editOpportunityReply(editBtn.dataset.index);
         });
       }
-      
+
       // Skip button
-      const skipBtn = item.querySelector('.opportunity-btn.skip');
+      const skipBtn = item.querySelector(".opportunity-btn.skip");
       if (skipBtn) {
-        skipBtn.addEventListener('click', (e) => {
+        skipBtn.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
           this.skipOpportunity(skipBtn.dataset.index);
@@ -1514,21 +1604,23 @@ if (!window.__xthreads_popup_injected__) {
     }
 
     selectAllOpportunities(select) {
-      const checkboxes = document.querySelectorAll('.opportunity-checkbox');
-      checkboxes.forEach(checkbox => {
+      const checkboxes = document.querySelectorAll(".opportunity-checkbox");
+      checkboxes.forEach((checkbox) => {
         checkbox.checked = select;
-        const item = checkbox.closest('.opportunity-item');
+        const item = checkbox.closest(".opportunity-item");
         if (item) {
-          item.classList.toggle('selected', select);
+          item.classList.toggle("selected", select);
         }
       });
       this.updateBatchControls();
     }
 
     updateBatchControls() {
-      const selectedCount = document.querySelectorAll('.opportunity-checkbox:checked').length;
-      const copySelectedBtn = document.getElementById('copySelectedBtn');
-      
+      const selectedCount = document.querySelectorAll(
+        ".opportunity-checkbox:checked"
+      ).length;
+      const copySelectedBtn = document.getElementById("copySelectedBtn");
+
       if (copySelectedBtn) {
         copySelectedBtn.disabled = selectedCount === 0;
         copySelectedBtn.textContent = `Copy Selected (${selectedCount})`;
@@ -1536,40 +1628,42 @@ if (!window.__xthreads_popup_injected__) {
     }
 
     async copySelectedOpportunities() {
-      const selectedItems = document.querySelectorAll('.opportunity-item.selected');
+      const selectedItems = document.querySelectorAll(
+        ".opportunity-item.selected"
+      );
       if (selectedItems.length === 0) {
-        this.showToast('No opportunities selected', 'error');
+        this.showToast("No opportunities selected", "error");
         return;
       }
-      
-      let copyText = '';
+
+      let copyText = "";
       selectedItems.forEach((item, index) => {
-        const openBtn = item.querySelector('.opportunity-btn.open');
-        const copyBtn = item.querySelector('.opportunity-btn.copy');
-        
-        const url = openBtn?.dataset.url || '';
-        const reply = copyBtn?.dataset.reply || '';
-        
+        const openBtn = item.querySelector(".opportunity-btn.open");
+        const copyBtn = item.querySelector(".opportunity-btn.copy");
+
+        const url = openBtn?.dataset.url || "";
+        const reply = copyBtn?.dataset.reply || "";
+
         copyText += `Tweet ${index + 1}: ${url}\nReply: ${reply}\n\n`;
       });
-      
+
       await this.copyToClipboard(copyText.trim());
-      this.showToast(`Copied ${selectedItems.length} opportunities`, 'success');
+      this.showToast(`Copied ${selectedItems.length} opportunities`, "success");
     }
 
     async clearAllOpportunities() {
       try {
         // Clear from storage
         await chrome.storage.local.set({ xthreads_batch_opportunities: [] });
-        
+
         // Update UI
         this.updateBatchBadge(0);
         this.displayBatchOpportunities([]);
-        
-        this.showToast('All opportunities cleared', 'success');
+
+        this.showToast("All opportunities cleared", "success");
       } catch (error) {
-        console.error('Failed to clear opportunities:', error);
-        this.showToast('Failed to clear opportunities', 'error');
+        console.error("Failed to clear opportunities:", error);
+        this.showToast("Failed to clear opportunities", "error");
       }
     }
 
@@ -1581,26 +1675,30 @@ if (!window.__xthreads_popup_injected__) {
 
     editOpportunityReply(index) {
       // TODO: Implement reply editing modal
-      this.showToast('Reply editing coming soon', 'info');
+      this.showToast("Reply editing coming soon", "info");
     }
 
     async skipOpportunity(index) {
       const item = document.querySelector(`[data-index="${index}"]`);
       if (item) {
         item.remove();
-        
+
         // Update stored opportunities
         try {
-          const result = await chrome.storage.local.get('xthreads_batch_opportunities');
+          const result = await chrome.storage.local.get(
+            "xthreads_batch_opportunities"
+          );
           const opportunities = result.xthreads_batch_opportunities || [];
           opportunities.splice(parseInt(index), 1);
-          await chrome.storage.local.set({ xthreads_batch_opportunities: opportunities });
-          
+          await chrome.storage.local.set({
+            xthreads_batch_opportunities: opportunities,
+          });
+
           // Update badge and display
           this.updateBatchBadge(opportunities.length);
           this.displayBatchOpportunities(opportunities);
         } catch (error) {
-          console.error('Failed to skip opportunity:', error);
+          console.error("Failed to skip opportunity:", error);
         }
       }
     }
@@ -1648,65 +1746,94 @@ if (!window.__xthreads_popup_injected__) {
 
     validateTone(tone) {
       const validTones = [
-        "professional", "casual", "punchy", "educational", "inspirational", 
-        "humorous", "empathetic", "encouraging", "authentic", "controversial", 
-        "bold", "witty", "insightful", "analytical", "storytelling"
+        "professional",
+        "casual",
+        "punchy",
+        "educational",
+        "inspirational",
+        "humorous",
+        "empathetic",
+        "encouraging",
+        "authentic",
+        "controversial",
+        "bold",
+        "witty",
+        "insightful",
+        "analytical",
+        "storytelling",
       ];
-      
+
       if (!validTones.includes(tone)) {
         console.warn(`Invalid tone: ${tone}. Using default 'professional'`);
         return "professional";
       }
-      
+
       return tone;
     }
 
     async restoreLastGenerated() {
       try {
         const result = await chrome.storage.local.get([
-          'xthreads_last_tweet',
-          'xthreads_last_rewrite', 
-          'xthreads_last_thread'
+          "xthreads_last_tweet",
+          "xthreads_last_rewrite",
+          "xthreads_last_thread",
         ]);
-        
+
         // Only restore if generated within last 30 minutes
-        const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000);
-        
+        const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000;
+
         // Restore tweet if available
-        if (result.xthreads_last_tweet && result.xthreads_last_tweet.timestamp > thirtyMinutesAgo) {
-          this.displayGeneratedContent(result.xthreads_last_tweet.content, "generateVariations");
+        if (
+          result.xthreads_last_tweet &&
+          result.xthreads_last_tweet.timestamp > thirtyMinutesAgo
+        ) {
+          this.displayGeneratedContent(
+            result.xthreads_last_tweet.content,
+            "generateVariations"
+          );
           document.getElementById("generateResults").style.display = "block";
-          console.log('Restored last generated tweet');
+          console.log("Restored last generated tweet");
         }
-        
+
         // Restore rewrite if available
-        if (result.xthreads_last_rewrite && result.xthreads_last_rewrite.timestamp > thirtyMinutesAgo) {
-          this.displayGeneratedContent(result.xthreads_last_rewrite.content, "rewriteVariations");
+        if (
+          result.xthreads_last_rewrite &&
+          result.xthreads_last_rewrite.timestamp > thirtyMinutesAgo
+        ) {
+          this.displayGeneratedContent(
+            result.xthreads_last_rewrite.content,
+            "rewriteVariations"
+          );
           document.getElementById("rewriteResults").style.display = "block";
-          console.log('Restored last rewritten content');
+          console.log("Restored last rewritten content");
         }
-        
+
         // Restore thread if available
-        if (result.xthreads_last_thread && result.xthreads_last_thread.timestamp > thirtyMinutesAgo) {
+        if (
+          result.xthreads_last_thread &&
+          result.xthreads_last_thread.timestamp > thirtyMinutesAgo
+        ) {
           this.currentThread = result.xthreads_last_thread.content;
           this.displayThread(result.xthreads_last_thread.content);
           document.getElementById("threadResults").style.display = "block";
-          console.log('Restored last generated thread');
+          console.log("Restored last generated thread");
         }
-        
+
         // Show toast if any content was restored
         const restoredCount = [
           result.xthreads_last_tweet?.timestamp > thirtyMinutesAgo,
           result.xthreads_last_rewrite?.timestamp > thirtyMinutesAgo,
-          result.xthreads_last_thread?.timestamp > thirtyMinutesAgo
+          result.xthreads_last_thread?.timestamp > thirtyMinutesAgo,
         ].filter(Boolean).length;
-        
+
         if (restoredCount > 0) {
-          this.showToast(`Restored ${restoredCount} previous generation(s)`, "info");
+          this.showToast(
+            `Restored ${restoredCount} previous generation(s)`,
+            "info"
+          );
         }
-        
       } catch (error) {
-        console.error('Failed to restore last generated content:', error);
+        console.error("Failed to restore last generated content:", error);
       }
     }
 
@@ -1715,116 +1842,125 @@ if (!window.__xthreads_popup_injected__) {
         const key = `xthreads_history_${type}`;
         const result = await chrome.storage.local.get(key);
         const history = result[key] || [];
-        
+
         // Add new item to beginning of array
         history.unshift({
           content: content,
           timestamp: Date.now(),
-          id: Date.now().toString()
+          id: Date.now().toString(),
         });
-        
+
         // Keep only last 10 items
         const trimmedHistory = history.slice(0, 10);
-        
+
         await chrome.storage.local.set({
-          [key]: trimmedHistory
+          [key]: trimmedHistory,
         });
-        
+
         // Also save as last generated for auto-restore
         await chrome.storage.local.set({
           [`xthreads_last_${type}`]: {
             content: Array.isArray(content) ? content : [content],
-            timestamp: Date.now()
-          }
+            timestamp: Date.now(),
+          },
         });
-        
+
         // Update history display if on history tab
-        if (this.currentTab === 'history') {
+        if (this.currentTab === "history") {
           await this.loadHistory();
         }
-        
       } catch (error) {
-        console.error('Failed to add to history:', error);
+        console.error("Failed to add to history:", error);
       }
     }
 
     async loadHistory() {
       try {
         const result = await chrome.storage.local.get([
-          'xthreads_history_tweet',
-          'xthreads_history_rewrite',
-          'xthreads_history_thread'
+          "xthreads_history_tweet",
+          "xthreads_history_rewrite",
+          "xthreads_history_thread",
         ]);
-        
-        this.displayHistory('tweet', result.xthreads_history_tweet || []);
-        this.displayHistory('rewrite', result.xthreads_history_rewrite || []);
-        this.displayHistory('thread', result.xthreads_history_thread || []);
-        
+
+        this.displayHistory("tweet", result.xthreads_history_tweet || []);
+        this.displayHistory("rewrite", result.xthreads_history_rewrite || []);
+        this.displayHistory("thread", result.xthreads_history_thread || []);
       } catch (error) {
-        console.error('Failed to load history:', error);
+        console.error("Failed to load history:", error);
       }
     }
 
     displayHistory(type, items) {
-      const containerId = `history${type.charAt(0).toUpperCase() + type.slice(1)}sList`;
+      const containerId = `history${
+        type.charAt(0).toUpperCase() + type.slice(1)
+      }sList`;
       const container = document.getElementById(containerId);
-      
+
       if (!container) return;
-      
+
       if (items.length === 0) {
         container.innerHTML = `<div class="history-empty">No ${type}s generated yet</div>`;
         return;
       }
-      
-      container.innerHTML = '';
-      
+
+      container.innerHTML = "";
+
       items.forEach((item, index) => {
-        const historyItem = document.createElement('div');
-        historyItem.className = 'history-item';
-        
+        const historyItem = document.createElement("div");
+        historyItem.className = "history-item";
+
         const timeAgo = this.getTimeAgo(item.timestamp);
         const preview = this.getContentPreview(item.content, type);
-        
+
         historyItem.innerHTML = `
           <div class="history-item-header">
             <span class="history-item-type">${type}</span>
             <span class="history-item-time">${timeAgo}</span>
           </div>
-          <div class="history-item-content ${type === 'thread' ? 'is-thread' : ''}">
+          <div class="history-item-content ${
+            type === "thread" ? "is-thread" : ""
+          }">
             ${preview}
           </div>
           <div class="history-item-actions">
-            <button class="history-copy-btn" data-type="${type}" data-id="${item.id}">
+            <button class="history-copy-btn" data-type="${type}" data-id="${
+          item.id
+        }">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2 2v1"/>
               </svg>
               Copy
             </button>
-            <button class="history-use-btn" data-type="${type}" data-id="${item.id}">
+            <button class="history-use-btn" data-type="${type}" data-id="${
+          item.id
+        }">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M5 12h14m-7-7l7 7-7 7"/>
               </svg>
               Use
             </button>
-            <button class="history-delete-btn" data-type="${type}" data-id="${item.id}">×</button>
+            <button class="history-delete-btn" data-type="${type}" data-id="${
+          item.id
+        }">×</button>
           </div>
         `;
-        
+
         container.appendChild(historyItem);
       });
     }
 
     getContentPreview(content, type) {
-      if (type === 'thread' && Array.isArray(content)) {
-        const preview = content[0].substring(0, 100) + (content[0].length > 100 ? '...' : '');
+      if (type === "thread" && Array.isArray(content)) {
+        const preview =
+          content[0].substring(0, 100) + (content[0].length > 100 ? "..." : "");
         return `
           <div class="history-item-preview">${preview}</div>
           <div class="history-thread-count">${content.length} tweets in thread</div>
         `;
       } else {
         const text = Array.isArray(content) ? content[0] : content;
-        return text.substring(0, 120) + (text.length > 120 ? '...' : '');
+        return text.substring(0, 120) + (text.length > 120 ? "..." : "");
       }
     }
 
@@ -1834,8 +1970,8 @@ if (!window.__xthreads_popup_injected__) {
       const minutes = Math.floor(diff / 60000);
       const hours = Math.floor(diff / 3600000);
       const days = Math.floor(diff / 86400000);
-      
-      if (minutes < 1) return 'Just now';
+
+      if (minutes < 1) return "Just now";
       if (minutes < 60) return `${minutes}m ago`;
       if (hours < 24) return `${hours}h ago`;
       return `${days}d ago`;
@@ -1846,30 +1982,32 @@ if (!window.__xthreads_popup_injected__) {
         const key = `xthreads_history_${type}`;
         const result = await chrome.storage.local.get(key);
         const history = result[key] || [];
-        
-        const item = history.find(h => h.id === id);
+
+        const item = history.find((h) => h.id === id);
         if (!item) return;
-        
-        if (type === 'thread') {
+
+        if (type === "thread") {
           this.currentThread = item.content;
-          this.switchTab('thread');
+          this.switchTab("thread");
           this.displayThread(item.content);
           document.getElementById("threadResults").style.display = "block";
         } else {
-          const content = Array.isArray(item.content) ? item.content : [item.content];
-          const tabName = type === 'tweet' ? 'generate' : 'rewrite';
-          const containerId = type === 'tweet' ? 'generateVariations' : 'rewriteVariations';
-          
+          const content = Array.isArray(item.content)
+            ? item.content
+            : [item.content];
+          const tabName = type === "tweet" ? "generate" : "rewrite";
+          const containerId =
+            type === "tweet" ? "generateVariations" : "rewriteVariations";
+
           this.switchTab(tabName);
           this.displayGeneratedContent(content, containerId);
           document.getElementById(`${tabName}Results`).style.display = "block";
         }
-        
-        this.showToast(`Loaded ${type} from history`, 'success');
-        
+
+        this.showToast(`Loaded ${type} from history`, "success");
       } catch (error) {
-        console.error('Failed to use history item:', error);
-        this.showToast('Failed to load from history', 'error');
+        console.error("Failed to use history item:", error);
+        this.showToast("Failed to load from history", "error");
       }
     }
 
@@ -1878,38 +2016,44 @@ if (!window.__xthreads_popup_injected__) {
         const key = `xthreads_history_${type}`;
         const result = await chrome.storage.local.get(key);
         const history = result[key] || [];
-        
-        const filteredHistory = history.filter(h => h.id !== id);
-        
+
+        const filteredHistory = history.filter((h) => h.id !== id);
+
         await chrome.storage.local.set({
-          [key]: filteredHistory
+          [key]: filteredHistory,
         });
-        
+
         this.displayHistory(type, filteredHistory);
-        this.showToast('Deleted from history', 'info');
-        
+        this.showToast("Deleted from history", "info");
       } catch (error) {
-        console.error('Failed to delete history item:', error);
-        this.showToast('Failed to delete item', 'error');
+        console.error("Failed to delete history item:", error);
+        this.showToast("Failed to delete item", "error");
       }
     }
 
     async clearAllHistory() {
-      if (!confirm('Are you sure you want to clear all history?')) return;
-      
+      if (!confirm("Are you sure you want to clear all history?")) return;
       try {
         await chrome.storage.local.remove([
-          'xthreads_history_tweet',
-          'xthreads_history_rewrite',
-          'xthreads_history_thread'
+          "xthreads_history_tweet",
+          "xthreads_history_rewrite",
+          "xthreads_history_thread",
+          "xthreads_batch_opportunities",
         ]);
-        
-        await this.loadHistory();
-        this.showToast('History cleared', 'success');
-        
+        // Immediately update all history and batch UI sections to empty
+        this.displayHistory("tweet", []);
+        this.displayHistory("rewrite", []);
+        this.displayHistory("thread", []);
+        if (typeof this.displayBatchOpportunities === "function") {
+          this.displayBatchOpportunities([]);
+        }
+        if (typeof this.updateBatchBadge === "function") {
+          this.updateBatchBadge(0);
+        }
+        this.showToast("History cleared", "success");
       } catch (error) {
-        console.error('Failed to clear history:', error);
-        this.showToast('Failed to clear history', 'error');
+        console.error("Failed to clear history:", error);
+        this.showToast("Failed to clear history", "error");
       }
     }
 
@@ -1932,7 +2076,9 @@ if (!window.__xthreads_popup_injected__) {
 
     async copyThreadToClipboard(thread) {
       try {
-        const threadText = thread.map((tweet, index) => `${index + 1}/${thread.length} ${tweet}`).join('\n\n');
+        const threadText = thread
+          .map((tweet, index) => `${index + 1}/${thread.length} ${tweet}`)
+          .join("\n\n");
         await this.copyToClipboard(threadText);
       } catch (error) {
         console.error("Failed to copy thread:", error);
@@ -1945,20 +2091,21 @@ if (!window.__xthreads_popup_injected__) {
         const key = `xthreads_history_${type}`;
         const result = await chrome.storage.local.get(key);
         const history = result[key] || [];
-        
-        const item = history.find(h => h.id === id);
+
+        const item = history.find((h) => h.id === id);
         if (!item) return;
-        
-        if (type === 'thread' && Array.isArray(item.content)) {
+
+        if (type === "thread" && Array.isArray(item.content)) {
           await this.copyThreadToClipboard(item.content);
         } else {
-          const text = Array.isArray(item.content) ? item.content[0] : item.content;
+          const text = Array.isArray(item.content)
+            ? item.content[0]
+            : item.content;
           await this.copyToClipboard(text);
         }
-        
       } catch (error) {
-        console.error('Failed to copy history item:', error);
-        this.showToast('Failed to copy from history', 'error');
+        console.error("Failed to copy history item:", error);
+        this.showToast("Failed to copy from history", "error");
       }
     }
 

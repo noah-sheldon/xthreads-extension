@@ -40,13 +40,13 @@ if (!window.__xthreads_popup_injected__) {
 
       this.bindEvents();
       this.updateApiKeyDisplay();
-      this.loadDefaultTone();
       await this.loadBrandSpaces(); // Wait for brand spaces to load
       await this.restoreConversationHistory(); // Restore 24-hour conversation
       await this.restoreLastGenerated(); // Restore any previously generated content
       await this.loadHistory(); // Load history for history tab
       this.updateUI();
       this.updateStats();
+      this.loadDefaultTone(); // Load default tone after settings are ready
       await this.checkForTweetData(); // Check if we should open reply tab
       await this.checkForRewriteData(); // Check if we should open rewrite tab
       await this.checkForBatchOpportunities(); // Check for batch opportunities
@@ -835,39 +835,52 @@ if (!window.__xthreads_popup_injected__) {
     async displayThreadInConversation(thread) {
       const messagesContainer = document.getElementById("messagesContainer");
       
-      // Create container for all thread tweets
-      const threadContainer = document.createElement("div");
-      threadContainer.className = "message-bubble assistant";
-      
-      let threadContent = '<div class="message-content">';
-      
+      // Create each tweet as a separate card
       for (let index = 0; index < thread.length; index++) {
         const tweet = thread[index];
-        const tweetId = `tweet-${Date.now()}-${index}`;
         
-        threadContent += `
-          <div class="thread-tweet" style="margin-bottom: 16px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb;">
-            <div class="thread-tweet-header" style="margin-bottom: 8px;">
-              <span class="thread-tweet-number" style="color: #14b8a6; font-weight: 600; font-size: 14px;">Tweet ${index + 1}:</span>
-            </div>
-            <div class="thread-tweet-text" style="color: #374151; line-height: 1.5; margin-bottom: 12px;">${this.escapeHtml(tweet)}</div>
-            <div class="thread-tweet-actions">
-              <button class="action-btn-small" onclick="window.xThreadsApp.copyToClipboard('${this.escapeHtml(this.formatTweetText(tweet))}'); window.xThreadsApp.showToast('Tweet ${index + 1} copied!', 'success');" style="font-size: 12px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                </svg>
-                Copy
-              </button>
+        // Create individual tweet card
+        const tweetContainer = document.createElement("div");
+        tweetContainer.className = "message-bubble assistant";
+        tweetContainer.style.marginBottom = "12px";
+        
+        tweetContainer.innerHTML = `
+          <div class="message-content">
+            <div class="thread-tweet" style="padding: 0;">
+              <div class="thread-tweet-header" style="margin-bottom: 8px;">
+                <span class="thread-tweet-number" style="color: #14b8a6; font-weight: 600; font-size: 14px;">Tweet ${index + 1}:</span>
+              </div>
+              <div class="thread-tweet-text" style="color: #374151; line-height: 1.5; margin-bottom: 12px;">${this.escapeHtml(tweet)}</div>
+              <div class="thread-tweet-actions">
+                <button class="action-btn-small" data-action="copy" data-text="${this.escapeForAttribute(this.formatTweetText(tweet))}" style="font-size: 12px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  </svg>
+                  Copy
+                </button>
+              </div>
             </div>
           </div>
         `;
+        
+        messagesContainer.appendChild(tweetContainer);
+        
+        // Bind action buttons for this tweet card
+        tweetContainer.querySelectorAll(".action-btn-small").forEach(btn => {
+          btn.addEventListener("click", (e) => {
+            const actionType = btn.dataset.action;
+            const text = btn.dataset.text;
+            
+            switch (actionType) {
+              case 'copy':
+                this.copyToClipboard(text);
+                break;
+            }
+          });
+        });
       }
       
-      threadContent += '</div>';
-      threadContainer.innerHTML = threadContent;
-      
-      messagesContainer.appendChild(threadContainer);
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
       
       // Store in conversation history
@@ -876,9 +889,6 @@ if (!window.__xthreads_popup_injected__) {
         content: thread.map((tweet, index) => `Tweet ${index + 1}: ${tweet}`).join('\n\n'),
         timestamp: Date.now()
       });
-      
-      // Make app instance available globally for button clicks
-      window.xThreadsApp = this;
     }
 
     async generateThread() {
@@ -1603,9 +1613,31 @@ if (!window.__xthreads_popup_injected__) {
       }
       
       try {
+        // Clear old history system
         await chrome.storage.local.set({
           xthreads_content_history: { tweets: [], rewrites: [], threads: [] }
         });
+        
+        // Clear new history system
+        await chrome.storage.local.remove([
+          'xthreads_history_tweet',
+          'xthreads_history_rewrite', 
+          'xthreads_history_thread'
+        ]);
+        
+        // Clear conversation history (generated tweets)
+        await chrome.storage.local.remove('xthreads_conversation_history');
+        
+        // Clear current conversation display
+        const messagesContainer = document.getElementById("messagesContainer");
+        if (messagesContainer) {
+          // Keep welcome message, remove all other messages
+          const welcomeMessage = messagesContainer.querySelector('.welcome-message');
+          messagesContainer.innerHTML = '';
+          if (welcomeMessage) {
+            messagesContainer.appendChild(welcomeMessage);
+          }
+        }
         
         this.loadHistoryContent();
         this.showToast('History cleared successfully', 'success');
@@ -1741,36 +1773,74 @@ if (!window.__xthreads_popup_injected__) {
         historyItem.className = 'history-item';
         
         const isThread = type === 'thread' && Array.isArray(item.content);
-        const displayContent = isThread ? item.content[0] : item.content;
-        const threadInfo = isThread ? `<div class="history-thread-count">${item.content.length} tweets</div>` : '';
         
-        historyItem.innerHTML = `
-          <div class="history-item-header">
-            <div class="history-item-time">${this.formatTime(item.timestamp)}</div>
-          </div>
-          <div class="history-item-content ${isThread ? 'is-thread' : ''}">
-            ${displayContent}
-          </div>
-          ${threadInfo}
-          <div class="history-item-actions">
-            <button class="history-copy-btn" data-content="${this.escapeHtml(isThread ? JSON.stringify(item.content) : item.content)}" data-type="${type}">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-              </svg>
-              Copy
-            </button>
-            <button class="history-delete-btn" data-index="${index}" data-type="${type}">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3,6 5,6 21,6"></polyline>
-                <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
-                <line x1="10" y1="11" x2="10" y2="17"></line>
-                <line x1="14" y1="11" x2="14" y2="17"></line>
-              </svg>
-              Delete
-            </button>
-          </div>
-        `;
+        if (isThread) {
+          // For threads, show each tweet individually with copy buttons
+          historyItem.innerHTML = `
+            <div class="history-item-header">
+              <div class="history-item-time">${this.formatTime(item.timestamp)}</div>
+              <div class="history-thread-count">${item.content.length} tweets in thread</div>
+            </div>
+            <div class="history-thread-tweets">
+              ${item.content.map((tweet, tweetIndex) => `
+                <div class="history-thread-tweet" style="margin-bottom: 12px; padding: 8px; border: 1px solid #e5e7eb; border-radius: 6px; background: #f9fafb;">
+                  <div class="thread-tweet-header" style="margin-bottom: 6px;">
+                    <span class="thread-tweet-number" style="color: #14b8a6; font-weight: 600; font-size: 12px;">Tweet ${tweetIndex + 1}:</span>
+                  </div>
+                  <div class="thread-tweet-text" style="color: #374151; line-height: 1.4; margin-bottom: 8px; font-size: 13px;">${this.escapeHtml(tweet)}</div>
+                  <div class="thread-tweet-actions">
+                    <button class="history-copy-btn" data-content="${this.escapeHtml(this.formatTweetText(tweet))}" data-type="tweet" style="font-size: 11px; padding: 4px 8px;">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                      </svg>
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+            <div class="history-item-actions">
+              <button class="history-delete-btn" data-index="${index}" data-type="${type}">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3,6 5,6 21,6"></polyline>
+                  <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
+                  <line x1="10" y1="11" x2="10" y2="17"></line>
+                  <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+                Delete
+              </button>
+            </div>
+          `;
+        } else {
+          // For regular content (generate/rewrite)
+          historyItem.innerHTML = `
+            <div class="history-item-header">
+              <div class="history-item-time">${this.formatTime(item.timestamp)}</div>
+            </div>
+            <div class="history-item-content">
+              ${item.content}
+            </div>
+            <div class="history-item-actions">
+              <button class="history-copy-btn" data-content="${this.escapeHtml(item.content)}" data-type="${type}">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                Copy
+              </button>
+              <button class="history-delete-btn" data-index="${index}" data-type="${type}">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3,6 5,6 21,6"></polyline>
+                  <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
+                  <line x1="10" y1="11" x2="10" y2="17"></line>
+                  <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+                Delete
+              </button>
+            </div>
+          `;
+        }
         
         container.appendChild(historyItem);
       });
@@ -2584,6 +2654,11 @@ if (!window.__xthreads_popup_injected__) {
         .replace(/'/g, "&#039;");
     }
 
+    escapeForAttribute(text) {
+      // Escape text for use in HTML attributes
+      return text.replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
     formatTweetText(text) {
       if (!text) return "";
       
@@ -2780,7 +2855,14 @@ if (!window.__xthreads_popup_injected__) {
     loadDefaultTone() {
       const toneSelect = document.getElementById("toneSelect");
       if (toneSelect && this.settings.tone) {
+        console.log('Loading default tone:', this.settings.tone);
         toneSelect.value = this.settings.tone;
+        console.log('Tone select value set to:', toneSelect.value);
+      } else {
+        console.log('Tone select not found or settings.tone not set:', {
+          toneSelect: !!toneSelect,
+          settingsTone: this.settings.tone
+        });
       }
     }
 
@@ -3051,11 +3133,31 @@ if (!window.__xthreads_popup_injected__) {
       if (!confirm('Are you sure you want to clear all history?')) return;
       
       try {
+        // Clear new history system
         await chrome.storage.local.remove([
           'xthreads_history_tweet',
           'xthreads_history_rewrite',
           'xthreads_history_thread'
         ]);
+        
+        // Clear conversation history (generated tweets)
+        await chrome.storage.local.remove('xthreads_conversation_history');
+        
+        // Clear old history system
+        await chrome.storage.local.set({
+          xthreads_content_history: { tweets: [], rewrites: [], threads: [] }
+        });
+        
+        // Clear current conversation display
+        const messagesContainer = document.getElementById("messagesContainer");
+        if (messagesContainer) {
+          // Keep welcome message, remove all other messages
+          const welcomeMessage = messagesContainer.querySelector('.welcome-message');
+          messagesContainer.innerHTML = '';
+          if (welcomeMessage) {
+            messagesContainer.appendChild(welcomeMessage);
+          }
+        }
         
         await this.loadHistory();
         this.showToast('History cleared', 'success');
