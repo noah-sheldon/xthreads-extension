@@ -6,11 +6,20 @@
     <title>xThreads AI Assistant</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
-  <body style="width: 640px; height: 400px; margin: 0; padding: 0; overflow: hidden;">
+  <body style="width: 640px; height: 500px; margin: 0; padding: 0; overflow: hidden;">
     <div class="app">
       <!-- Header -->
       <div class="header">
         <div class="header-content">
+          <div class="dropdown-section">
+            <div class="action-dropdown-wrapper">
+              <select class="action-dropdown" id="actionSelect">
+                <option value="generate">Generate</option>
+                <option value="rewrite">Rewrite</option>
+                <option value="thread">Threads</option>
+              </select>
+            </div>
+          </div>
           <div class="logo">
             <div class="logo-icon">
               <img src="assets/icon16.png" alt="xThreads" width="20" height="20" />
@@ -41,16 +50,6 @@
 
       <!-- Main Chat Interface -->
       <div class="chat-container">
-        <!-- Action Selector -->
-        <div class="action-selector">
-          <div class="action-dropdown-wrapper">
-            <select class="action-dropdown" id="actionSelect">
-              <option value="generate">✨ Generate from idea</option>
-              <option value="rewrite">✏️ Rewrite content</option>
-              <option value="thread">📝 Create thread</option>
-            </select>
-          </div>
-        </div>
 
         <!-- Chat Messages -->
         <div class="messages-container">
@@ -117,10 +116,7 @@
                   <select id="threadTone" style="display: none;"></select>
                 </div>
                 <button id="sendBtn" class="send-btn" disabled>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M22 2L11 13"/>
-                    <path d="M22 2L15 22L11 13L2 9L22 2Z"/>
-                  </svg>
+                  Send
                 </button>
                 <!-- Hidden buttons for backward compatibility -->
                 <button id="generateBtn" style="display: none;"></button>
@@ -302,12 +298,15 @@
       <div class="modal-content history-modal">
         <div class="modal-header">
           <h2>Content History</h2>
-          <button id="closeHistory" class="close-btn">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+          <div class="header-actions">
+            <button id="clearHistoryBtn" class="btn-secondary btn-small">Clear All History</button>
+            <button id="closeHistory" class="close-btn">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="modal-body">
           <div class="history-tabs">
@@ -356,9 +355,6 @@
             </div>
           </div>
           
-          <div class="history-actions">
-            <button id="clearHistoryBtn" class="btn-secondary btn-small">Clear All History</button>
-          </div>
         </div>
       </div>
     </div>

@@ -14,6 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This is a Chrome extension for X.com (Twitter) that provides AI-powered tweet assistance via the xthreads.app API. The extension consists of three main components:
 
 ### Core Files Structure
+
 - **manifest.json**: Chrome extension manifest v3 with permissions for X.com, scripting, storage
 - **background.js**: Service worker handling extension lifecycle, settings, stats, API validation
 - **content.js**: Content script injected into X.com pages, handles tweet analysis and auto-replies
@@ -22,28 +23,33 @@ This is a Chrome extension for X.com (Twitter) that provides AI-powered tweet as
 
 ### Key Architecture Patterns
 
-**State Management**: 
+**State Management**:
+
 - Chrome storage API for persistent settings (`xthreads_settings`, `xthreads_stats`)
 - Settings include: API key, keywords, tone, mode (manual/auto), active status
 
 **Communication Flow**:
+
 - Popup ↔ Background: `chrome.runtime.sendMessage()` for settings/stats
 - Popup ↔ Content: `chrome.tabs.sendMessage()` for UI actions
 - Content → Background: Stats updates and API key validation
 
 **Content Script Features**:
+
 - Tweet analysis and keyword matching
 - Rate limiting (20s between replies, max 60/hour)
 - Activity tracking (pauses when user inactive >5min)
 - DOM manipulation for overlay buttons and reply automation
 
 ### Build System
+
 - **Vite** with React for popup development (src/ directory)
 - **vite-plugin-static-copy** copies extension files to dist/
 - **ESLint** with TypeScript and React plugins
 - **Tailwind CSS** for styling
 
 ### API Integration
+
 - **xthreads.app API** endpoints:
   - `/api/ai-reply` - Generate tweet replies
   - `/api/rewrite` - Rewrite existing tweets
@@ -51,10 +57,10 @@ This is a Chrome extension for X.com (Twitter) that provides AI-powered tweet as
 - API key stored securely in Chrome storage, validated on first use
 
 ### Extension Permissions
+
 - `activeTab`, `scripting`: Content script injection
-- `storage`: Settings and stats persistence  
+- `storage`: Settings and stats persistence
 - `tabs`: Tab management for posting
-- `declarativeContent`: Conditional activation
 - Host permissions for `xthreads.app` API calls
 
 ## Development Notes

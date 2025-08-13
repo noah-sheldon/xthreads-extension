@@ -23,6 +23,7 @@ if (!window.__xthreads_popup_injected__) {
       this.currentTab = "generate";
       this.currentThread = [];
       this.batchOpportunityCount = 0;
+      this.conversationRestored = false;
 
       this.init();
     }
@@ -39,7 +40,9 @@ if (!window.__xthreads_popup_injected__) {
 
       this.bindEvents();
       this.updateApiKeyDisplay();
+      this.loadDefaultTone();
       await this.loadBrandSpaces(); // Wait for brand spaces to load
+      await this.restoreConversationHistory(); // Restore 24-hour conversation
       await this.restoreLastGenerated(); // Restore any previously generated content
       await this.loadHistory(); // Load history for history tab
       this.updateUI();
@@ -47,6 +50,11 @@ if (!window.__xthreads_popup_injected__) {
       await this.checkForTweetData(); // Check if we should open reply tab
       await this.checkForRewriteData(); // Check if we should open rewrite tab
       await this.checkForBatchOpportunities(); // Check for batch opportunities
+      
+      // Add window focus listener to restore conversation
+      window.addEventListener('focus', async () => {
+        await this.restoreConversationHistory();
+      });
       await this.checkForActiveOpportunity(); // Check for active opportunity from opened tabs
       
       // Badge functionality removed
@@ -207,6 +215,8 @@ if (!window.__xthreads_popup_injected__) {
       const charCountContainer = document.getElementById("charCountContainer");
       const charCount = document.getElementById("charCount");
 
+      if (!input || !sendBtn) return; // Exit if required elements don't exist
+
       // Auto-resize textarea
       input.addEventListener("input", (e) => {
         const target = e.target;
@@ -214,7 +224,7 @@ if (!window.__xthreads_popup_injected__) {
         target.style.height = Math.min(target.scrollHeight, 120) + 'px';
         
         // Update char count for rewrite mode
-        if (this.currentTab === 'rewrite') {
+        if (this.currentTab === 'rewrite' && charCount && charCountContainer) {
           const length = target.value.length;
           charCount.textContent = length;
           if (length > 280) {
@@ -226,7 +236,7 @@ if (!window.__xthreads_popup_injected__) {
           } else {
             charCountContainer.style.display = 'none';
           }
-        } else {
+        } else if (charCountContainer) {
           charCountContainer.style.display = 'none';
         }
 
@@ -253,9 +263,11 @@ if (!window.__xthreads_popup_injected__) {
       });
 
       // Tone selection - sync with hidden selects
-      toneSelect.addEventListener("change", (e) => {
-        this.syncToneSelects(e.target.value);
-      });
+      if (toneSelect) {
+        toneSelect.addEventListener("change", (e) => {
+          this.syncToneSelects(e.target.value);
+        });
+      }
     }
 
     syncInputs(value) {
@@ -299,14 +311,14 @@ if (!window.__xthreads_popup_injected__) {
           this.rewriteContent();
           break;
         case 'thread':
-          this.generateThread();
+          this.generateThreadUnified(userInput);
           break;
         default:
           break;
       }
     }
 
-    addUserMessage(text) {
+    async addUserMessage(text) {
       const messagesContainer = document.getElementById("messagesContainer");
       const userMessage = document.createElement("div");
       userMessage.className = "message-bubble user";
@@ -324,9 +336,16 @@ if (!window.__xthreads_popup_injected__) {
       
       messagesContainer.appendChild(userMessage);
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      
+      // Store in conversation history
+      await this.saveConversationMessage({
+        type: 'user',
+        content: text,
+        timestamp: Date.now()
+      });
     }
 
-    addAssistantMessage(content, actions = []) {
+    async addAssistantMessage(content, actions = []) {
       const messagesContainer = document.getElementById("messagesContainer");
       const assistantMessage = document.createElement("div");
       assistantMessage.className = "message-bubble assistant";
@@ -347,13 +366,21 @@ if (!window.__xthreads_popup_injected__) {
       
       assistantMessage.innerHTML = `
         <div class="message-content">
-          <p>${this.escapeHtml(content)}</p>
+          <p>${this.formatTweetTextForDisplay(content)}</p>
           ${actionsHtml}
         </div>
       `;
       
       messagesContainer.appendChild(assistantMessage);
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      
+      // Store in conversation history
+      await this.saveConversationMessage({
+        type: 'assistant',
+        content: content,
+        actions: actions,
+        timestamp: Date.now()
+      });
 
       // Bind action buttons
       assistantMessage.querySelectorAll(".action-btn-small").forEach(btn => {
@@ -440,27 +467,32 @@ if (!window.__xthreads_popup_injected__) {
       const toneSelect = document.getElementById("agentTone");
       const agentToggle = document.getElementById("agentToggle");
 
-      // Load current settings
-      keywordsInput.value = this.settings.keywords.join(", ");
-      toneSelect.value = this.settings.tone;
-      agentToggle.checked = this.settings.isActive;
+      // Load current settings only if elements exist
+      if (keywordsInput) {
+        keywordsInput.value = this.settings.keywords.join(", ");
+        keywordsInput.addEventListener("input", (e) => {
+          this.settings.keywords = e.target.value
+            .split(",")
+            .map((k) => k.trim())
+            .filter((k) => k.length > 0);
+          this.saveSettings();
+        });
+      }
 
-      keywordsInput.addEventListener("input", (e) => {
-        this.settings.keywords = e.target.value
-          .split(",")
-          .map((k) => k.trim())
-          .filter((k) => k.length > 0);
-        this.saveSettings();
-      });
+      if (toneSelect) {
+        toneSelect.value = this.settings.tone;
+        toneSelect.addEventListener("change", (e) => {
+          this.settings.tone = this.validateTone(e.target.value);
+          this.saveSettings();
+        });
+      }
 
-      toneSelect.addEventListener("change", (e) => {
-        this.settings.tone = this.validateTone(e.target.value);
-        this.saveSettings();
-      });
-
-      agentToggle.addEventListener("change", (e) => {
-        this.toggleAgent(e.target.checked);
-      });
+      if (agentToggle) {
+        agentToggle.checked = this.settings.isActive;
+        agentToggle.addEventListener("change", (e) => {
+          this.toggleAgent(e.target.checked);
+        });
+      }
 
       // Auto-bot toggle
       const autoBotToggle = document.getElementById("autoBotToggle");
@@ -651,7 +683,7 @@ if (!window.__xthreads_popup_injected__) {
         // Save to history
         await this.addToHistory('tweet', tweet);
 
-        this.displayGeneratedContent([tweet], "generateVariations");
+        await this.displayGeneratedContent([tweet], "generateVariations");
         results.style.display = "block";
       } catch (error) {
         console.error("Failed to generate tweet:", error);
@@ -725,7 +757,7 @@ if (!window.__xthreads_popup_injected__) {
         // Save to history
         await this.addToHistory('rewrite', validatedVariations[0]);
 
-        this.displayGeneratedContent(validatedVariations, "rewriteVariations");
+        await this.displayGeneratedContent(validatedVariations, "rewriteVariations");
         results.style.display = "block";
       } catch (error) {
         console.error("Failed to rewrite content:", error);
@@ -743,6 +775,110 @@ if (!window.__xthreads_popup_injected__) {
       `
         );
       }
+    }
+
+    async generateThreadUnified(userInput) {
+      const tone = this.validateTone(document.getElementById("toneSelect").value);
+
+      if (!userInput || !userInput.trim()) {
+        this.showToast("Please enter content for the thread", "error");
+        return;
+      }
+
+      if (!this.settings.selectedBrandId || this.settings.selectedBrandId === "undefined") {
+        this.showToast("Please select a brand space in settings first", "error");
+        this.openSettings();
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          "https://www.xthreads.app/api/generate-thread",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": this.settings.apiKey,
+            },
+            body: JSON.stringify({
+              prompt: userInput.trim(),
+              brandId: this.settings.selectedBrandId,
+              tone: tone,
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const thread = data.thread || [];
+        const validatedThread = thread.map((tweet) =>
+          this.validateAndTruncateContent(tweet)
+        );
+
+        this.currentThread = validatedThread;
+        
+        // Save to history
+        await this.addToHistory('thread', validatedThread);
+
+        // Display thread using the old numbered format in conversation
+        await this.displayThreadInConversation(validatedThread);
+
+      } catch (error) {
+        console.error("Failed to generate thread:", error);
+        this.showToast("Failed to generate thread. Please try again.", "error");
+      }
+    }
+
+    async displayThreadInConversation(thread) {
+      const messagesContainer = document.getElementById("messagesContainer");
+      
+      // Create container for all thread tweets
+      const threadContainer = document.createElement("div");
+      threadContainer.className = "message-bubble assistant";
+      
+      let threadContent = '<div class="message-content">';
+      
+      for (let index = 0; index < thread.length; index++) {
+        const tweet = thread[index];
+        const tweetId = `tweet-${Date.now()}-${index}`;
+        
+        threadContent += `
+          <div class="thread-tweet" style="margin-bottom: 16px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb;">
+            <div class="thread-tweet-header" style="margin-bottom: 8px;">
+              <span class="thread-tweet-number" style="color: #14b8a6; font-weight: 600; font-size: 14px;">Tweet ${index + 1}:</span>
+            </div>
+            <div class="thread-tweet-text" style="color: #374151; line-height: 1.5; margin-bottom: 12px;">${this.escapeHtml(tweet)}</div>
+            <div class="thread-tweet-actions">
+              <button class="action-btn-small" onclick="window.xThreadsApp.copyToClipboard('${this.escapeHtml(this.formatTweetText(tweet))}'); window.xThreadsApp.showToast('Tweet ${index + 1} copied!', 'success');" style="font-size: 12px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                Copy
+              </button>
+            </div>
+          </div>
+        `;
+      }
+      
+      threadContent += '</div>';
+      threadContainer.innerHTML = threadContent;
+      
+      messagesContainer.appendChild(threadContainer);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      
+      // Store in conversation history
+      await this.saveConversationMessage({
+        type: 'assistant',
+        content: thread.map((tweet, index) => `Tweet ${index + 1}: ${tweet}`).join('\n\n'),
+        timestamp: Date.now()
+      });
+      
+      // Make app instance available globally for button clicks
+      window.xThreadsApp = this;
     }
 
     async generateThread() {
@@ -796,7 +932,7 @@ if (!window.__xthreads_popup_injected__) {
         // Save to history
         await this.addToHistory('thread', validatedThread);
 
-        this.displayThread(validatedThread);
+        await this.displayThread(validatedThread);
         results.style.display = "block";
       } catch (error) {
         console.error("Failed to generate thread:", error);
@@ -921,32 +1057,26 @@ if (!window.__xthreads_popup_injected__) {
       return cleaned;
     }
 
-    displayGeneratedContent(variations, containerId) {
+    async displayGeneratedContent(variations, containerId) {
       // For new chat interface, add as assistant messages
-      variations.forEach((variation, index) => {
+      for (const variation of variations) {
         const actions = [
           {
             type: 'copy',
             label: 'Copy',
-            text: variation,
+            text: this.formatTweetText(variation),
             icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2 2v1"/>
             </svg>`
-          },
-          {
-            type: 'use',
-            label: 'Use in X',
-            text: variation,
-            icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 2L11 13"/>
-              <path d="M22 2L15 22L11 13L2 9L22 2Z"/>
-            </svg>`
           }
         ];
         
-        this.addAssistantMessage(variation, actions);
-      });
+        await this.addAssistantMessage(variation, actions);
+      }
+      
+      // Also await all the promises if using forEach would be converted to for...of
+      // variations.forEach((variation, index) => {
 
       // Also maintain backward compatibility with old container system
       const container = document.getElementById(containerId);
@@ -982,31 +1112,26 @@ if (!window.__xthreads_popup_injected__) {
       }
     }
 
-    displayThread(thread) {
-      // For new chat interface, display thread as a single message
-      const threadText = thread.map((tweet, index) => `${index + 1}. ${tweet}`).join('\n\n');
+    async displayThread(thread) {
+      // For new chat interface, display each thread tweet separately with individual copy buttons
+      for (let index = 0; index < thread.length; index++) {
+        const tweet = thread[index];
+        const actions = [
+          {
+            type: 'copy',
+            label: 'Copy',
+            text: this.formatTweetText(tweet),
+            icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>`
+          }
+        ];
+        
+        await this.addAssistantMessage(tweet, actions);
+      }
       
-      const actions = [
-        {
-          type: 'copy',
-          label: 'Copy Thread',
-          text: threadText,
-          icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-          </svg>`
-        },
-        {
-          type: 'post',
-          label: 'Post Thread',
-          icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 2L11 13"/>
-            <path d="M22 2L15 22L11 13L2 9L22 2Z"/>
-          </svg>`
-        }
-      ];
-      
-      this.addAssistantMessage(`Here's your thread:\n\n${threadText}`, actions);
+      // Note: Individual tweets are displayed above with their own copy buttons
 
       // Also maintain backward compatibility
       const container = document.getElementById("threadPreview");
@@ -1371,8 +1496,9 @@ if (!window.__xthreads_popup_injected__) {
     openHistoryModal() {
       const modal = document.getElementById('historyModal');
       if (modal) {
+        console.log('🚀 Opening history modal...');
+        this.loadHistoryModal();
         modal.style.display = 'flex';
-        this.loadHistoryContent();
       }
     }
 
@@ -1569,15 +1695,31 @@ if (!window.__xthreads_popup_injected__) {
 
     async loadHistoryModal() {
       try {
+        console.log('📂 Loading history modal...');
+        
+        // Get recent tweets from 24-hour conversation history
+        const recentTweets = await this.getRecentTweets();
+        console.log(`📊 Recent tweets retrieved: ${recentTweets.length}`);
+        
+        // Get traditional history for rewrite and threads
         const result = await chrome.storage.local.get([
-          'xthreads_history_tweet',
           'xthreads_history_rewrite', 
           'xthreads_history_thread'
         ]);
         
-        this.displayHistorySection('historyTweets', result.xthreads_history_tweet || [], 'tweet');
-        this.displayHistorySection('historyRewrites', result.xthreads_history_rewrite || [], 'rewrite');
-        this.displayHistorySection('historyThreads', result.xthreads_history_thread || [], 'thread');
+        // Display recent tweets in the Generated section
+        const mappedTweets = recentTweets.map(tweet => ({
+          id: tweet.id,
+          content: tweet.content,
+          timestamp: tweet.timestamp,
+          type: 'tweet'
+        }));
+        
+        console.log(`📋 Mapped tweets for display:`, mappedTweets);
+        this.displayHistorySection('generatedHistory', mappedTweets, 'tweet');
+        
+        this.displayHistorySection('rewrittenHistory', result.xthreads_history_rewrite || [], 'rewrite');
+        this.displayHistorySection('threadsHistory', result.xthreads_history_thread || [], 'thread');
         
       } catch (error) {
         console.error('Failed to load history:', error);
@@ -1604,7 +1746,6 @@ if (!window.__xthreads_popup_injected__) {
         
         historyItem.innerHTML = `
           <div class="history-item-header">
-            <div class="history-item-type">${type}</div>
             <div class="history-item-time">${this.formatTime(item.timestamp)}</div>
           </div>
           <div class="history-item-content ${isThread ? 'is-thread' : ''}">
@@ -1613,13 +1754,21 @@ if (!window.__xthreads_popup_injected__) {
           ${threadInfo}
           <div class="history-item-actions">
             <button class="history-copy-btn" data-content="${this.escapeHtml(isThread ? JSON.stringify(item.content) : item.content)}" data-type="${type}">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
               </svg>
               Copy
             </button>
-            <button class="history-delete-btn" data-index="${index}" data-type="${type}">Delete</button>
+            <button class="history-delete-btn" data-index="${index}" data-type="${type}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3,6 5,6 21,6"></polyline>
+                <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+              </svg>
+              Delete
+            </button>
           </div>
         `;
         
@@ -1662,12 +1811,39 @@ if (!window.__xthreads_popup_injected__) {
 
     async deleteHistoryItem(type, index) {
       try {
-        const storageKey = `xthreads_history_${type}`;
-        const result = await chrome.storage.local.get(storageKey);
-        const items = result[storageKey] || [];
-        
-        items.splice(index, 1);
-        await chrome.storage.local.set({ [storageKey]: items });
+        if (type === 'tweet') {
+          // Delete from conversation history
+          const result = await chrome.storage.local.get('xthreads_conversation_history');
+          const conversation = result.xthreads_conversation_history || [];
+          
+          // Find and remove the tweet at the specified index
+          let tweetIndex = 0;
+          let messageIndex = -1;
+          
+          for (let i = 0; i < conversation.length; i++) {
+            if (conversation[i].type === 'assistant' && conversation[i].content && 
+                (conversation[i].content.includes('Here are') || conversation[i].content.includes('tweet'))) {
+              if (tweetIndex === index) {
+                messageIndex = i;
+                break;
+              }
+              tweetIndex++;
+            }
+          }
+          
+          if (messageIndex >= 0) {
+            conversation.splice(messageIndex, 1);
+            await chrome.storage.local.set({ xthreads_conversation_history: conversation });
+          }
+        } else {
+          // Delete from regular history
+          const storageKey = `xthreads_history_${type}`;
+          const result = await chrome.storage.local.get(storageKey);
+          const items = result[storageKey] || [];
+          
+          items.splice(index, 1);
+          await chrome.storage.local.set({ [storageKey]: items });
+        }
         
         this.showToast('Item deleted', 'success');
       } catch (error) {
@@ -2408,6 +2584,206 @@ if (!window.__xthreads_popup_injected__) {
         .replace(/'/g, "&#039;");
     }
 
+    formatTweetText(text) {
+      if (!text) return "";
+      
+      // Add actual line breaks after periods followed by space and capitalize letter
+      let formatted = text.replace(/\. ([A-Z])/g, '.\n\n$1');
+      return formatted;
+    }
+
+    formatTweetTextForDisplay(text) {
+      if (!text) return "";
+      
+      // First escape HTML entities, then add line breaks
+      let escaped = this.escapeHtml(text);
+      let formatted = escaped.replace(/\. ([A-Z])/g, '.<br><br>$1');
+      return formatted;
+    }
+
+    // 24-Hour Conversation Storage System
+    async saveConversationMessage(message) {
+      try {
+        console.log(`💾 Saving conversation message:`, message);
+        const result = await chrome.storage.local.get('xthreads_conversation_history');
+        let conversation = result.xthreads_conversation_history || [];
+        
+        // Add new message
+        const messageWithId = {
+          id: Date.now() + Math.random(),
+          ...message
+        };
+        conversation.push(messageWithId);
+        
+        console.log(`📝 Message added to conversation. Total messages: ${conversation.length}`);
+        
+        // Clean up messages older than 24 hours
+        const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
+        conversation = conversation.filter(msg => msg.timestamp > twentyFourHoursAgo);
+        
+        await chrome.storage.local.set({
+          xthreads_conversation_history: conversation
+        });
+        
+        console.log(`✅ Conversation saved successfully. Messages after cleanup: ${conversation.length}`);
+      } catch (error) {
+        console.error('❌ Failed to save conversation message:', error);
+      }
+    }
+
+    async loadConversationHistory() {
+      try {
+        const result = await chrome.storage.local.get('xthreads_conversation_history');
+        const conversation = result.xthreads_conversation_history || [];
+        
+        // Clean up old messages (24+ hours)
+        const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
+        const validConversation = conversation.filter(msg => msg.timestamp > twentyFourHoursAgo);
+        
+        // Update storage with cleaned data
+        if (validConversation.length !== conversation.length) {
+          await chrome.storage.local.set({
+            xthreads_conversation_history: validConversation
+          });
+        }
+        
+        return validConversation;
+      } catch (error) {
+        console.error('Failed to load conversation history:', error);
+        return [];
+      }
+    }
+
+    async restoreConversationHistory() {
+      try {
+        console.log('🔄 Attempting to restore conversation history...');
+        const conversation = await this.loadConversationHistory();
+        console.log(`📝 Found ${conversation.length} messages in history`);
+        
+        if (conversation.length === 0) return; // No conversation to restore
+        
+        const messagesContainer = document.getElementById("messagesContainer");
+        
+        // Check if we already have the correct number of messages to avoid duplicates
+        const existingMessages = messagesContainer.querySelectorAll('.message-bubble');
+        console.log(`💬 Current messages in UI: ${existingMessages.length}, History messages: ${conversation.length}`);
+        
+        if (existingMessages.length === conversation.length) {
+          console.log('✅ Messages already displayed correctly');
+          return;
+        }
+        
+        // Hide welcome message
+        const welcomeMessage = messagesContainer.querySelector(".welcome-message");
+        if (welcomeMessage) {
+          welcomeMessage.style.display = "none";
+        }
+        
+        // Clear existing messages to avoid duplicates
+        existingMessages.forEach(msg => msg.remove());
+        
+        // Restore messages
+        for (const message of conversation) {
+          if (message.type === 'user') {
+            const userMessage = document.createElement("div");
+            userMessage.className = "message-bubble user";
+            userMessage.innerHTML = `
+              <div class="message-content">
+                <p>${this.escapeHtml(message.content)}</p>
+              </div>
+            `;
+            messagesContainer.appendChild(userMessage);
+          } else if (message.type === 'assistant') {
+            const assistantMessage = document.createElement("div");
+            assistantMessage.className = "message-bubble assistant";
+            
+            let actionsHtml = "";
+            if (message.actions && message.actions.length > 0) {
+              actionsHtml = `
+                <div class="message-actions">
+                  ${message.actions.map(action => `
+                    <button class="action-btn-small" data-action="${action.type}" data-text="${this.escapeHtml(action.text || message.content)}">
+                      ${action.icon}
+                      ${action.label}
+                    </button>
+                  `).join('')}
+                </div>
+              `;
+            }
+            
+            assistantMessage.innerHTML = `
+              <div class="message-content">
+                <p>${this.formatTweetTextForDisplay(message.content)}</p>
+                ${actionsHtml}
+              </div>
+            `;
+            
+            messagesContainer.appendChild(assistantMessage);
+            
+            // Bind action buttons
+            assistantMessage.querySelectorAll(".action-btn-small").forEach(btn => {
+              btn.addEventListener("click", (e) => {
+                const action = e.currentTarget.dataset.action;
+                const text = e.currentTarget.dataset.text;
+                this.handleMessageAction(action, text);
+              });
+            });
+          }
+        }
+        
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        console.log('✅ Conversation history restored successfully');
+        
+      } catch (error) {
+        console.error('❌ Failed to restore conversation history:', error);
+      }
+    }
+
+    async getRecentTweets() {
+      try {
+        console.log('🔍 Getting recent tweets from conversation history...');
+        const conversation = await this.loadConversationHistory();
+        console.log(`📝 Conversation loaded: ${conversation.length} messages`);
+        const tweets = [];
+        
+        for (const message of conversation) {
+          console.log(`📨 Processing message: type=${message.type}, actions=${message.actions?.length || 0}`);
+          if (message.type === 'assistant' && message.actions) {
+            // Extract tweets from assistant messages with copy actions
+            for (const action of message.actions) {
+              console.log(`🔍 Checking action: type=${action.type}, hasText=${!!action.text}`);
+              if (action.type === 'copy' && action.text) {
+                tweets.push({
+                  id: message.id,
+                  content: action.text,
+                  timestamp: message.timestamp,
+                  originalMessage: message.content
+                });
+                console.log(`✅ Added tweet to recent list: ${action.text.substring(0, 50)}...`);
+              }
+            }
+          }
+        }
+        
+        console.log(`📊 Found ${tweets.length} recent tweets total`);
+        
+        // Sort by most recent first
+        tweets.sort((a, b) => b.timestamp - a.timestamp);
+        
+        return tweets;
+      } catch (error) {
+        console.error('❌ Failed to get recent tweets:', error);
+        return [];
+      }
+    }
+
+    loadDefaultTone() {
+      const toneSelect = document.getElementById("toneSelect");
+      if (toneSelect && this.settings.tone) {
+        toneSelect.value = this.settings.tone;
+      }
+    }
+
     updateApiKeyDisplay() {
       const display = document.getElementById("currentApiKeyDisplay");
       if (display) {
@@ -2565,7 +2941,6 @@ if (!window.__xthreads_popup_injected__) {
         
         historyItem.innerHTML = `
           <div class="history-item-header">
-            <span class="history-item-type">${type}</span>
             <span class="history-item-time">${timeAgo}</span>
           </div>
           <div class="history-item-content ${type === 'thread' ? 'is-thread' : ''}">

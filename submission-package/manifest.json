@@ -1,18 +1,11 @@
 {
   "manifest_version": 3,
   "name": "xThreads Agent",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AI-powered content creation and automated reply generation for X.com using xThreads.app API",
   "author": "xThreads",
   "homepage_url": "https://xthreads.app",
-  "permissions": [
-    "activeTab",
-    "scripting",
-    "storage",
-    "tabs",
-    "declarativeContent",
-    "notifications"
-  ],
+  "permissions": ["activeTab", "scripting", "storage", "tabs", "notifications"],
   "host_permissions": [
     "https://www.xthreads.app/*",
     "https://xthreads.app/*",

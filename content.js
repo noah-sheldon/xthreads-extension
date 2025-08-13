@@ -876,9 +876,19 @@ if (!window.__xthreads_injected__) {
         }
 
         if (rewrittenContent && typeof rewrittenContent === "string") {
-          console.log("✅ Content rewritten, showing in popup rewrite tab...");
+          console.log("✅ Content rewritten, copying to clipboard...");
 
-          // Store rewrite data for popup display
+          // Copy rewritten content to clipboard
+          try {
+            await navigator.clipboard.writeText(rewrittenContent);
+            this.showToast("Rewritten content copied to clipboard!", "success");
+          } catch (error) {
+            console.error("Failed to copy to clipboard:", error);
+            // Fallback: show content in toast for manual copying
+            this.showToast(`Copy this: ${rewrittenContent.substring(0, 100)}${rewrittenContent.length > 100 ? '...' : ''}`, "info", 10000);
+          }
+
+          // Store rewrite data for history
           await chrome.storage.local.set({
             xthreads_rewrite_data: {
               originalContent: content,
@@ -887,17 +897,6 @@ if (!window.__xthreads_injected__) {
               timestamp: Date.now(),
             },
           });
-
-          this.showToast("Content rewritten! Opening popup...", "success");
-
-          // Open popup to rewrite tab
-          try {
-            chrome.runtime.sendMessage({
-              action: "openPopupToRewriteTab",
-            });
-          } catch (error) {
-            console.log("Could not send message to background:", error);
-          }
 
           // Show popup indicator as fallback
           this.showOpenRewritePopupIndicator();
@@ -2302,7 +2301,7 @@ if (!window.__xthreads_injected__) {
             )}" width="20" height="20" />
           </div>
           <div class="xthreads-indicator-text">
-            Content rewritten! Click the xThreads extension icon to see results
+            Content rewritten and copied to clipboard!
           </div>
           <button class="xthreads-indicator-close">×</button>
         </div>
