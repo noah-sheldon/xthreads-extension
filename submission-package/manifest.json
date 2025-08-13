@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "xThreads Agent",
+  "name": "xThreads AI Assistant",
   "version": "1.0.1",
   "description": "AI-powered content creation and automated reply generation for X.com using xThreads.app API",
   "author": "xThreads",
