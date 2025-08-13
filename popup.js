@@ -39,10 +39,11 @@ if (!window.__xthreads_popup_injected__) {
       }
 
       this.bindEvents();
+      console.log('🔧 Events bound, initial currentTab:', this.currentTab);
       this.updateApiKeyDisplay();
       await this.loadBrandSpaces(); // Wait for brand spaces to load
-      await this.restoreConversationHistory(); // Restore 24-hour conversation
-      await this.restoreLastGenerated(); // Restore any previously generated content
+      // await this.restoreConversationHistory(); // Disabled - don't restore previous conversations
+      // await this.restoreLastGenerated(); // Disabled - using only unified system
       await this.loadHistory(); // Load history for history tab
       this.updateUI();
       this.updateStats();
@@ -50,10 +51,10 @@ if (!window.__xthreads_popup_injected__) {
       await this.checkForRewriteData(); // Check if we should open rewrite tab
       await this.checkForBatchOpportunities(); // Check for batch opportunities
       
-      // Add window focus listener to restore conversation
-      window.addEventListener('focus', async () => {
-        await this.restoreConversationHistory();
-      });
+      // Window focus listener disabled - not restoring conversations
+      // window.addEventListener('focus', async () => {
+      //   await this.restoreConversationHistory();
+      // });
       await this.checkForActiveOpportunity(); // Check for active opportunity from opened tabs
       
       // Badge functionality removed
@@ -206,11 +207,6 @@ if (!window.__xthreads_popup_injected__) {
       // New unified input system
       this.bindUnifiedInput();
       
-      // Bind legacy events for backward compatibility
-      this.bindGenerateEvents();
-      this.bindRewriteEvents();
-      this.bindThreadEvents();
-      this.bindReplyEvents();
       this.bindBatchEvents();
       this.bindAgentEvents();
       this.bindSettingsEvents();
@@ -252,7 +248,7 @@ if (!window.__xthreads_popup_injected__) {
         sendBtn.disabled = target.value.trim().length === 0;
 
         // Sync with hidden inputs for backward compatibility
-        this.syncInputs(target.value);
+        // No sync needed in unified system
       });
 
       // Send button
@@ -270,10 +266,10 @@ if (!window.__xthreads_popup_injected__) {
         }
       });
 
-      // Tone selection - sync with hidden selects
+      // Tone selection
       if (toneSelect) {
         toneSelect.addEventListener("change", (e) => {
-          this.syncToneSelects(e.target.value);
+          // Tone changed - no sync needed in unified system
         });
       }
       
@@ -282,50 +278,59 @@ if (!window.__xthreads_popup_injected__) {
       this.loadDefaultTone();
     }
 
-    syncInputs(value) {
-      // Sync with hidden inputs for backward compatibility
-      const inputs = ["generateInput", "rewriteInput", "threadInput"];
-      inputs.forEach(id => {
-        const input = document.getElementById(id);
-        if (input) input.value = value;
-      });
-    }
+    // Legacy function placeholders (unified system only)
+    bindGenerateEvents() { /* Disabled - using unified system */ }
+    bindRewriteEvents() { /* Disabled - using unified system */ }
+    bindThreadEvents() { /* Disabled - using unified system */ }
+    async generateTweet() { console.log('Legacy generateTweet called - use unified system'); }
+    async rewriteContent() { console.log('Legacy rewriteContent called - use unified system'); }
+    async generateThread() { console.log('Legacy generateThread called - use unified system'); }
+    async displayGeneratedContent() { console.log('Legacy displayGeneratedContent called - use unified system'); }
+    async displayThread() { console.log('Legacy displayThread called - use unified system'); }
 
-    syncToneSelects(value) {
-      // Sync with hidden tone selects for backward compatibility
-      const selects = ["generateTone", "rewriteTone", "threadTone"];
-      selects.forEach(id => {
-        const select = document.getElementById(id);
-        if (select) select.value = value;
-      });
-    }
+
 
     handleSend() {
+      console.log('🚀 handleSend called');
       const input = document.getElementById("contentInput");
-      if (!input.value.trim()) return;
+      console.log('📝 Input element:', input);
+      console.log('📝 Input value:', input?.value);
+      
+      if (!input.value.trim()) {
+        console.log('❌ Empty input, returning');
+        return;
+      }
 
       // Add user message to chat
+      console.log('💬 Adding user message to chat');
       this.addUserMessage(input.value.trim());
 
       // Clear input and show loading
       const userInput = input.value.trim();
+      console.log('📄 User input captured:', userInput);
+      
       input.value = "";
       input.style.height = 'auto';
       document.getElementById("sendBtn").disabled = true;
       document.getElementById("charCountContainer").style.display = 'none';
 
       // Execute based on current tab
+      console.log('🎯 Current tab:', this.currentTab);
       switch (this.currentTab) {
         case 'generate':
-          this.generateTweet();
+          console.log('🔄 Calling generateTweetUnified');
+          this.generateTweetUnified(userInput);
           break;
         case 'rewrite':
-          this.rewriteContent();
+          console.log('🔄 Calling rewriteContentUnified');
+          this.rewriteContentUnified(userInput);
           break;
         case 'thread':
+          console.log('🔄 Calling generateThreadUnified');
           this.generateThreadUnified(userInput);
           break;
         default:
+          console.log('❌ Unknown tab:', this.currentTab);
           break;
       }
     }
@@ -357,18 +362,42 @@ if (!window.__xthreads_popup_injected__) {
       });
     }
 
-    async addAssistantMessage(content, actions = []) {
+    async addAssistantMessage(content, actions = [], type = 'generate') {
       const messagesContainer = document.getElementById("messagesContainer");
       const assistantMessage = document.createElement("div");
       assistantMessage.className = "message-bubble assistant";
       
+      // Create modern card design matching thread cards
+      const charCount = content.length;
+      const charCountColor = charCount > 240 ? '#ef4444' : charCount > 200 ? '#f59e0b' : '#10b981';
+      
+      // Different badge content based on type
+      let badgeIcon, badgeText;
+      switch(type) {
+        case 'rewrite':
+          badgeIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>`;
+          badgeText = 'Rewritten Tweet';
+          break;
+        default: // generate
+          badgeIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                      </svg>`;
+          badgeText = 'Generated Tweet';
+      }
+      
       let actionsHtml = "";
       if (actions.length > 0) {
         actionsHtml = `
-          <div class="message-actions">
+          <div class="tweet-actions">
             ${actions.map(action => `
-              <button class="action-btn-small" data-action="${action.type}" data-text="${this.escapeHtml(action.text || content)}">
-                ${action.icon}
+              <button class="tweet-copy-btn" data-action="${action.type}" data-text="${this.escapeHtml(action.text || content)}">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
                 ${action.label}
               </button>
             `).join('')}
@@ -377,9 +406,20 @@ if (!window.__xthreads_popup_injected__) {
       }
       
       assistantMessage.innerHTML = `
-        <div class="message-content">
-          <p>${this.formatTweetTextForDisplay(content)}</p>
-          ${actionsHtml}
+        <div class="tweet-card">
+          <div class="tweet-card-header">
+            <div class="tweet-type-badge">
+              ${badgeIcon}
+              ${badgeText}
+            </div>
+            <div class="char-counter" style="color: ${charCountColor}">
+              ${charCount}/280
+            </div>
+          </div>
+          <div class="tweet-card-content">
+            <div class="tweet-text">${this.formatTweetTextForDisplay(content)}</div>
+            ${actionsHtml}
+          </div>
         </div>
       `;
       
@@ -395,7 +435,7 @@ if (!window.__xthreads_popup_injected__) {
       });
 
       // Bind action buttons
-      assistantMessage.querySelectorAll(".action-btn-small").forEach(btn => {
+      assistantMessage.querySelectorAll(".tweet-copy-btn").forEach(btn => {
         btn.addEventListener("click", (e) => {
           const actionType = btn.dataset.action;
           const text = btn.dataset.text;
@@ -419,40 +459,7 @@ if (!window.__xthreads_popup_injected__) {
       return assistantMessage;
     }
 
-    bindGenerateEvents() {
-      const input = document.getElementById("generateInput");
-      const btn = document.getElementById("generateBtn");
 
-      input.addEventListener("input", (e) => {
-        btn.disabled = e.target.value.trim().length === 0;
-      });
-
-      btn.addEventListener("click", () => {
-        this.generateTweet();
-      });
-    }
-
-    bindRewriteEvents() {
-      const input = document.getElementById("rewriteInput");
-      const charCount = document.getElementById("rewriteCharCount");
-      const btn = document.getElementById("rewriteBtn");
-
-      input.addEventListener("input", (e) => {
-        const length = e.target.value.length;
-        charCount.textContent = length;
-        btn.disabled = length === 0;
-
-        if (length > 280) {
-          charCount.style.color = "#ef4444";
-        } else {
-          charCount.style.color = "#6b7280";
-        }
-      });
-
-      btn.addEventListener("click", () => {
-        this.rewriteContent();
-      });
-    }
 
     bindThreadEvents() {
       const input = document.getElementById("threadInput");
@@ -612,6 +619,7 @@ if (!window.__xthreads_popup_injected__) {
     }
 
     switchTab(tabName) {
+      console.log('🔄 switchTab called with:', tabName);
       // Update dropdown selection
       const actionSelect = document.getElementById('actionSelect');
       if (actionSelect) {
@@ -789,6 +797,210 @@ if (!window.__xthreads_popup_injected__) {
       }
     }
 
+    async rewriteContentUnified(userInput) {
+      console.log('✏️ rewriteContentUnified started');
+      console.log('📋 User input:', userInput);
+      
+      const toneSelect = document.getElementById("toneSelect");
+      console.log('🎵 Tone select element:', toneSelect);
+      console.log('🎵 Tone select value:', toneSelect?.value);
+      
+      const tone = this.validateTone(toneSelect?.value);
+      console.log('🎵 Validated tone:', tone);
+      
+      console.log('⚙️ Current settings:', {
+        selectedBrandId: this.settings.selectedBrandId,
+        apiKey: this.settings.apiKey ? 'SET' : 'NOT SET',
+        tone: this.settings.tone
+      });
+
+      if (!userInput || !userInput.trim()) {
+        console.log('❌ No user input provided');
+        this.showToast("Please enter content to rewrite", "error");
+        return;
+      }
+
+      if (!this.settings.selectedBrandId || this.settings.selectedBrandId === "undefined") {
+        console.log('❌ No brand space selected');
+        this.showToast("Please select a brand space in settings first", "error");
+        this.openSettings();
+        return;
+      }
+
+      if (!this.settings.apiKey) {
+        console.log('❌ No API key found');
+        this.showToast("Please set your API key in settings first", "error");
+        this.openSettings();
+        return;
+      }
+
+      try {
+        console.log('🚀 Making API request to /api/rewrite-content');
+        const requestData = {
+          originalContent: userInput.trim(),
+          brandId: this.settings.selectedBrandId,
+          tone: tone,
+        };
+        console.log('📤 Request data:', requestData);
+        
+        const response = await fetch("https://www.xthreads.app/api/rewrite-content", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": this.settings.apiKey,
+          },
+          body: JSON.stringify(requestData),
+        });
+
+        console.log('📡 Response status:', response.status);
+        console.log('📡 Response ok:', response.ok);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.log('❌ API error response:', errorText);
+          throw new Error(`API request failed: ${response.status} - ${errorText}`);
+        }
+
+        const data = await response.json();
+        console.log('📥 API response data:', data);
+        
+        // API returns rewrittenContent as a string (not array)
+        const rewrittenContentRaw = data.rewrittenContent;
+        console.log('📥 Rewritten content raw:', rewrittenContentRaw);
+        console.log('📥 Content type check:', {
+          exists: !!rewrittenContentRaw,
+          type: typeof rewrittenContentRaw,
+          isString: typeof rewrittenContentRaw === 'string',
+          length: rewrittenContentRaw?.length
+        });
+        
+        if (!rewrittenContentRaw || typeof rewrittenContentRaw !== 'string' || rewrittenContentRaw.trim().length === 0) {
+          console.log('❌ Validation failed:', {
+            exists: !!rewrittenContentRaw,
+            type: typeof rewrittenContentRaw,
+            trimmedLength: rewrittenContentRaw?.trim?.()?.length
+          });
+          throw new Error('No rewritten content received from API');
+        }
+        
+        console.log('📋 Processing content string:', rewrittenContentRaw);
+        const rewrittenContent = this.validateAndTruncateContent(rewrittenContentRaw);
+        console.log('✅ Validated rewritten content:', rewrittenContent);
+
+        // Save to history
+        console.log('💾 Saving to history');
+        await this.addToHistory('rewrite', rewrittenContent);
+
+        // Add to conversation only
+        const actions = [{
+          type: 'copy',
+          label: 'Copy',
+          text: this.formatTweetText(rewrittenContent)
+        }];
+        console.log('💬 Adding assistant message with actions:', actions);
+
+        await this.addAssistantMessage(this.formatTweetText(rewrittenContent), actions, 'rewrite');
+        console.log('✅ Rewrite completed successfully');
+
+      } catch (error) {
+        console.error("❌ Failed to rewrite content:", error);
+        console.error("❌ Error stack:", error.stack);
+        this.showToast("Failed to rewrite content. Please try again.", "error");
+      }
+    }
+
+    async generateTweetUnified(userInput) {
+      console.log('🎬 generateTweetUnified started');
+      console.log('📋 User input:', userInput);
+      
+      const toneSelect = document.getElementById("toneSelect");
+      console.log('🎵 Tone select element:', toneSelect);
+      console.log('🎵 Tone select value:', toneSelect?.value);
+      
+      const tone = this.validateTone(toneSelect?.value);
+      console.log('🎵 Validated tone:', tone);
+      
+      console.log('⚙️ Current settings:', {
+        selectedBrandId: this.settings.selectedBrandId,
+        apiKey: this.settings.apiKey ? 'SET' : 'NOT SET',
+        tone: this.settings.tone
+      });
+
+      if (!userInput || !userInput.trim()) {
+        console.log('❌ No user input provided');
+        this.showToast("Please enter content for the tweet", "error");
+        return;
+      }
+
+      if (!this.settings.selectedBrandId || this.settings.selectedBrandId === "undefined") {
+        console.log('❌ No brand space selected');
+        this.showToast("Please select a brand space in settings first", "error");
+        this.openSettings();
+        return;
+      }
+
+      if (!this.settings.apiKey) {
+        console.log('❌ No API key found');
+        this.showToast("Please set your API key in settings first", "error");
+        this.openSettings();
+        return;
+      }
+
+      try {
+        console.log('🚀 Making API request to /api/generate-tweet');
+        const requestData = {
+          prompt: userInput.trim(),
+          brandId: this.settings.selectedBrandId,
+          tone: tone,
+        };
+        console.log('📤 Request data:', requestData);
+        
+        const response = await fetch("https://www.xthreads.app/api/generate-tweet", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": this.settings.apiKey,
+          },
+          body: JSON.stringify(requestData),
+        });
+
+        console.log('📡 Response status:', response.status);
+        console.log('📡 Response ok:', response.ok);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.log('❌ API error response:', errorText);
+          throw new Error(`API request failed: ${response.status} - ${errorText}`);
+        }
+
+        const data = await response.json();
+        console.log('📥 API response data:', data);
+        
+        const tweet = this.validateAndTruncateContent(data.tweet);
+        console.log('✅ Validated tweet:', tweet);
+
+        // Save to history
+        console.log('💾 Saving to history');
+        await this.addToHistory('tweet', tweet);
+
+        // Add to conversation only (not old results system)
+        const actions = [{
+          type: 'copy',
+          label: 'Copy',
+          text: this.formatTweetText(tweet)
+        }];
+        console.log('💬 Adding assistant message with actions:', actions);
+
+        await this.addAssistantMessage(this.formatTweetText(tweet), actions);
+        console.log('✅ Tweet generation completed successfully');
+
+      } catch (error) {
+        console.error("❌ Failed to generate tweet:", error);
+        console.error("❌ Error stack:", error.stack);
+        this.showToast("Failed to generate tweet. Please try again.", "error");
+      }
+    }
+
     async generateThreadUnified(userInput) {
       const tone = this.validateTone(document.getElementById("toneSelect").value);
 
@@ -858,13 +1070,25 @@ if (!window.__xthreads_popup_injected__) {
         
         tweetContainer.innerHTML = `
           <div class="message-content">
-            <div class="thread-tweet" style="padding: 0;">
-              <div class="thread-tweet-header" style="margin-bottom: 8px;">
-                <span class="thread-tweet-number" style="color: #14b8a6; font-weight: 600; font-size: 14px;">Tweet ${index + 1}:</span>
+            <div class="thread-tweet-card">
+              <div class="thread-tweet-header">
+                <div class="tweet-number-badge">
+                  <span class="tweet-number">${index + 1}</span>
+                </div>
+                <div class="tweet-indicator">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/>
+                  </svg>
+                </div>
               </div>
-              <div class="thread-tweet-text" style="color: #374151; line-height: 1.5; margin-bottom: 12px;">${this.escapeHtml(tweet)}</div>
-              <div class="thread-tweet-actions">
-                <button class="action-btn-small" data-action="copy" data-text="${this.escapeForAttribute(this.formatTweetText(tweet))}" style="font-size: 12px;">
+              <div class="thread-tweet-content">
+                <p class="thread-tweet-text">${this.escapeHtml(tweet)}</p>
+              </div>
+              <div class="thread-tweet-footer">
+                <div class="char-count">
+                  <span class="char-count-text">${tweet.length}/280</span>
+                </div>
+                <button class="action-btn-small thread-copy-btn" data-action="copy" data-text="${this.escapeForAttribute(this.formatTweetText(tweet))}">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>

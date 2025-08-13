@@ -167,6 +167,226 @@ body {
   min-height: 0;
 }
 
+/* AI Warning Banner */
+.ai-warning-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 1px solid #f59e0b;
+  border-radius: 6px;
+  margin: 12px 16px 0 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #92400e;
+  box-shadow: 0 1px 3px rgba(245, 158, 11, 0.1);
+}
+
+.warning-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.warning-text {
+  flex: 1;
+}
+
+/* Thread Tweet Cards */
+.thread-tweet-card {
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border: 2px solid #14b8a6;
+  border-radius: 12px;
+  padding: 0;
+  margin: 0;
+  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.15);
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+
+.thread-tweet-card:hover {
+  box-shadow: 0 6px 20px rgba(20, 184, 166, 0.25);
+  transform: translateY(-2px);
+}
+
+.thread-tweet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.tweet-number-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.tweet-number {
+  font-weight: 700;
+  font-size: 14px;
+  color: #14b8a6;
+}
+
+.tweet-indicator {
+  color: rgba(255, 255, 255, 0.9);
+  opacity: 0.8;
+}
+
+.thread-tweet-content {
+  padding: 16px;
+}
+
+.thread-tweet-text {
+  color: #374151;
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+  font-weight: 400;
+}
+
+.thread-tweet-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-top: 1px solid #e5e7eb;
+}
+
+.char-count {
+  display: flex;
+  align-items: center;
+}
+
+.char-count-text {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.thread-copy-btn {
+  background: #14b8a6 !important;
+  color: white !important;
+  border: none !important;
+  padding: 6px 12px !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  box-shadow: 0 2px 4px rgba(20, 184, 166, 0.2) !important;
+  transition: all 0.15s ease !important;
+}
+
+.thread-copy-btn:hover {
+  background: #0d9488 !important;
+  box-shadow: 0 4px 8px rgba(20, 184, 166, 0.3) !important;
+  transform: translateY(-1px) !important;
+}
+
+.thread-copy-btn svg {
+  margin-right: 4px;
+}
+
+/* Tweet Cards (Generate/Rewrite) */
+.tweet-card {
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border: 2px solid #14b8a6;
+  border-radius: 12px;
+  padding: 0;
+  margin: 0;
+  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.15);
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+
+.tweet-card:hover {
+  box-shadow: 0 6px 20px rgba(20, 184, 166, 0.25);
+  transform: translateY(-2px);
+}
+
+.tweet-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.tweet-type-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.tweet-type-badge svg {
+  flex-shrink: 0;
+}
+
+.char-counter {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+  color: #10b981;
+}
+
+.tweet-card-content {
+  padding: 16px;
+}
+
+.tweet-text {
+  color: #1f2937;
+  line-height: 1.5;
+  font-size: 15px;
+  margin-bottom: 16px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.tweet-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tweet-copy-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(20, 184, 166, 0.2);
+}
+
+.tweet-copy-btn:hover {
+  background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
+  box-shadow: 0 4px 8px rgba(20, 184, 166, 0.3);
+  transform: translateY(-1px);
+}
+
+.tweet-copy-btn svg {
+  flex-shrink: 0;
+}
+
 /* Action Dropdown */
 .action-selector {
   padding: var(--space-4) var(--space-4) 0;
