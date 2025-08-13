@@ -46,7 +46,6 @@ if (!window.__xthreads_popup_injected__) {
       await this.loadHistory(); // Load history for history tab
       this.updateUI();
       this.updateStats();
-      this.loadDefaultTone(); // Load default tone after settings are ready
       await this.checkForTweetData(); // Check if we should open reply tab
       await this.checkForRewriteData(); // Check if we should open rewrite tab
       await this.checkForBatchOpportunities(); // Check for batch opportunities
@@ -62,16 +61,25 @@ if (!window.__xthreads_popup_injected__) {
 
     async loadSettings() {
       try {
+        console.log('⚙️ Loading settings...');
         const result = await chrome.storage.local.get([
           "xthreads_settings",
           "xthreads_stats",
         ]);
+        console.log('⚙️ Settings loaded from storage:', result);
+        
         if (result.xthreads_settings) {
           this.settings = { ...this.settings, ...result.xthreads_settings };
+          console.log('⚙️ Settings merged:', this.settings);
         }
         if (result.xthreads_stats) {
           this.stats = { ...this.stats, ...result.xthreads_stats };
         }
+        
+        console.log('⚙️ Final settings after load:', {
+          tone: this.settings.tone,
+          allSettings: this.settings
+        });
       } catch (error) {
         console.error("Failed to load settings:", error);
       }
@@ -268,6 +276,10 @@ if (!window.__xthreads_popup_injected__) {
           this.syncToneSelects(e.target.value);
         });
       }
+      
+      // Load default tone after DOM elements are ready
+      console.log('🚀 DOM ready, calling loadDefaultTone from bindEvents');
+      this.loadDefaultTone();
     }
 
     syncInputs(value) {
@@ -2854,15 +2866,30 @@ if (!window.__xthreads_popup_injected__) {
 
     loadDefaultTone() {
       const toneSelect = document.getElementById("toneSelect");
-      if (toneSelect && this.settings.tone) {
-        console.log('Loading default tone:', this.settings.tone);
-        toneSelect.value = this.settings.tone;
-        console.log('Tone select value set to:', toneSelect.value);
+      console.log('🎵 loadDefaultTone called:', {
+        toneSelectExists: !!toneSelect,
+        settingsTone: this.settings.tone,
+        allSettings: this.settings,
+        toneSelectOptions: toneSelect ? Array.from(toneSelect.options).map(o => o.value) : 'N/A'
+      });
+      
+      if (!toneSelect) {
+        console.log('❌ toneSelect element not found, retrying in 100ms...');
+        setTimeout(() => this.loadDefaultTone(), 100);
+        return;
+      }
+      
+      if (this.settings.tone) {
+        console.log('✅ Setting tone select value to:', this.settings.tone);
+        try {
+          toneSelect.value = this.settings.tone;
+          console.log('✅ Tone select value after setting:', toneSelect.value);
+          console.log('✅ Selected option text:', toneSelect.selectedOptions[0]?.text);
+        } catch (error) {
+          console.error('❌ Error setting tone value:', error);
+        }
       } else {
-        console.log('Tone select not found or settings.tone not set:', {
-          toneSelect: !!toneSelect,
-          settingsTone: this.settings.tone
-        });
+        console.log('❌ No settings.tone value to set:', this.settings.tone);
       }
     }
 
